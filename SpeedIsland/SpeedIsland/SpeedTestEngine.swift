@@ -195,7 +195,7 @@ final class SpeedTestEngine: NSObject, ObservableObject, URLSessionDataDelegate 
             if pingAvgMs == nil { parts.append("延迟没测到") }
             if downloadMbps == nil { parts.append("下载没测到") }
             if uploadMbps == nil { parts.append("上传没测到") }
-            statusText = parts.isEmpty ? "测速完成" : "测速完成（\(parts.joined(separator: "、")）"
+            statusText = "测速完成" + (parts.isEmpty ? "" : "（" + parts.joined(separator: "、") + "）")
         }
         progress = 1.0
         isRunning = false
