@@ -1,16 +1,14 @@
 import Foundation
 import UIKit
 
-/// v2.2 引擎 — 修了 v2.1 验证报告里的 P0
-/// P0-3 修：低电量切换不再永久停刷。原来 restart() 调 start() 会被 guard 挡住，
-/// 现在拆成 startTimerOnly()，重启只重建 timer，不走 start() 的 guard。
-/// P0-6 修：NotificationCenter 用 token 保存，stop() 时按 token 删，不再越积越多。
-/// P1-5 修：文字不变也不断更，每 4 秒推一次心跳，灵动岛 / PiP 闲时也不冻住。
-/// 永远开：App 活着时 Live Activity 8 小时到期会自动重建，不用手动点（v2.6 修了
-/// 实现：原来只看 isActive，系统结束 Activity 时它不会变 false，永远不重建；
-/// 现在每次 tick 都查系统里还活着的 Activity，没有就重建）；
-/// 上次开着就被杀掉 / 重启后，再打开 App 会自动续开（UserDefaults 记状态）。
-/// 低耗电：有流量 1 秒，闲时 4 秒心跳，低电量 5 秒；leeway 放到 200ms 让系统合并唤醒。
+/// v3.0 引擎 — 简化重构
+/// 删掉了 BackgroundKeepAlive（静音音频保活）：GitHub 上同类项目 Cue 已在真机上验证
+/// 静音音频保不住后台（锁屏即被挂起），还会在用户听音乐时抢占打断，所以彻底移除，
+/// 也不再要 UIBackgroundModes: audio。唯一可靠的持续刷新是画中画小窗：小窗开着，
+/// iOS 就不会挂起 App，1 秒定时器一直跑，灵动岛跟着刷。所以 start() 即自动开小窗，
+/// 点一次“开始”就同时开小窗，不用再手动点。
+/// 保留：Live Activity 8 小时到期自动重建；上次开着被杀掉/重启后，再打开 App 自动续开；
+/// 有流量 1 秒，闲时 4 秒心跳，低电量 5 秒；leeway 200ms。
 final class SpeedEngine: ObservableObject {
     @Published private(set) var downText = "0 B/s"
     @Published private(set) var upText = "0 B/s"
@@ -44,10 +42,11 @@ final class SpeedEngine: ObservableObject {
         guard !isRunning else { return }
         isRunning = true
         UserDefaults.standard.set(true, forKey: Self.wasRunningKey)
-        BackgroundKeepAlive.shared.start()
         sampler.reset()
         lastDownText = ""; lastUpText = ""; lastPush = .distantPast
         startTimerOnly()
+        // v3.0：开始即自动开小窗（小窗是唯一可靠的保活），不用再手动点
+        setPiP(true)
         // 只注册一次，token 保存好，stop() 时按 token 删
         if powerObserver == nil {
             powerObserver = NotificationCenter.default.addObserver(
@@ -102,12 +101,13 @@ final class SpeedEngine: ObservableObject {
         }
     }
 
-    func togglePiP() {
-        // 不再置灰难用：没开始就先开始，再开小窗，一键就能用
-        if !isRunning { start() }
-        isPiPOn.toggle()
-        if isPiPOn {
-            // v2.3：先赋值回调再启动。原来先调 startPiP() 后赋值，
+    /// v3.0：小窗开关抽成 setPiP，start() 直接调它自动开；togglePiP 在未开始时
+    /// 直接走 start()（start 里已自动开小窗），不再先 start 再取反导致开完又关。
+    private func setPiP(_ on: Bool) {
+        if on == isPiPOn { return }
+        isPiPOn = on
+        if on {
+            // 先赋值回调再启动。原来先调 startPiP() 后赋值，
             // 不支持 PiP 的设备上同步失败那次回调是 nil，isPiPOn 会一直为 true
             PiPManager.shared.onPiPFailed = { [weak self] in
                 self?.isPiPOn = false
@@ -118,6 +118,12 @@ final class SpeedEngine: ObservableObject {
         } else {
             PiPManager.shared.stopPiP()
         }
+    }
+
+    func togglePiP() {
+        // 未开始就先开始（start 里已自动开小窗），直接返回，不再取反
+        if !isRunning { start(); return }
+        setPiP(!isPiPOn)
     }
 
     /// v2.5：用户在 App 里改了颜色/字号/底色，立即生效：
@@ -157,7 +163,6 @@ final class SpeedEngine: ObservableObject {
             NotificationCenter.default.removeObserver(token)
             powerObserver = nil
         }
-        BackgroundKeepAlive.shared.stop()
         manager.stop()
         if isPiPOn { PiPManager.shared.stopPiP(); isPiPOn = false }
         downText = "0 B/s"; upText = "0 B/s"
