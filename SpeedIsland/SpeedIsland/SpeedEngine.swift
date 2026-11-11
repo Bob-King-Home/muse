@@ -122,6 +122,8 @@ final class SpeedEngine: ObservableObject {
 
     /// v2.5：用户在 App 里改了颜色/字号/底色，立即生效：
     /// 灵动岛 / 锁屏马上重推，画中画马上重画，不用等下一秒 tick，也不用重装。
+    /// @MainActor：里面调 LiveActivityManager（@MainActor）的方法，不加会报
+    /// “call to main actor-isolated instance method in a synchronous nonisolated context”。
     @MainActor
     func refreshAppearance() {
         guard isRunning else { return }
@@ -144,6 +146,8 @@ final class SpeedEngine: ObservableObject {
         timer = nil
     }
 
+    /// @MainActor：里面调 manager.stop()（LiveActivityManager 是 @MainActor），
+    /// 不加会报 “call to main actor-isolated instance method in a synchronous nonisolated context”。
     @MainActor
     func stop() {
         isRunning = false
