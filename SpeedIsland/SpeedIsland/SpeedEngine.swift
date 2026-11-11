@@ -190,11 +190,13 @@ final class SpeedEngine: ObservableObject {
             // v3.8：岛按 2 秒限速推（上面 pushIsland 决定），主界面数字每秒都刷新。
             // v3.12：灵动岛开关关了就不推岛（App 继续跑，主界面照常显示）。
             // v3.14：满 5 分钟重建一次 Live Activity，重置系统限流预算，岛恢复 2 秒一跳。
-            // 岛会闪一下（消失再出现）。只在岛开着时做；重建那一下跳过 ensureActive。
+            // v3.19：改成满 2 分钟重建一次（用户 2026-11-12：5 分钟太长，2 分钟才够顶住限流），
+            // 且重建时不重置 sessionStart（LiveActivityManager.restart 里已去掉），
+            // 所以“已运行”计时不会跳回 00:00，用户无感知。只在岛开着时做。
             // v2.6：8 小时到期自动续期。不要只看 manager.isActive（系统结束 Activity 时
             // 它不会变 false），ensureActive() 每次都查系统里还活着的 Activity，没有就重建。
             if pushIsland && islandEnabled {
-                if Date().timeIntervalSince(lastRestart) >= 300 {
+                if Date().timeIntervalSince(lastRestart) >= 120 {
                     lastRestart = Date()
                     self.manager.restart(downText: d, upText: u, isWiFi: s.isWiFi, ssid: self.ssid, ip: ip, netType: netType, carrier: carrier)
                 } else {
