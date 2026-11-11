@@ -28,7 +28,7 @@ struct SpeedIslandLiveActivity: Widget {
                     Text("↑ \(context.state.upText)")
                         .animation(nil, value: context.state.upText)
                 }
-                .font(.system(size: lockSize, weight: .bold, design: .default).monospacedDigit())
+                .font(.system(size: lockSize, weight: .bold, design: .monospaced))
                 .foregroundStyle(fontColor)
                 // v3.2：数字直接切换，不淡入淡出
                 .contentTransition(.identity)
@@ -50,7 +50,7 @@ struct SpeedIslandLiveActivity: Widget {
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     Text("↓ \(context.state.downText)")
-                        .font(.system(size: islandSize + 2, weight: .bold, design: .default).monospacedDigit())
+                        .font(.system(size: islandSize + 2, weight: .bold, design: .monospaced))
                         .foregroundStyle(fontColor)
                         .contentTransition(.identity)
                         .animation(nil, value: context.state.downText)
@@ -58,7 +58,7 @@ struct SpeedIslandLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     Text("↑ \(context.state.upText)")
-                        .font(.system(size: islandSize + 2, weight: .bold, design: .default).monospacedDigit())
+                        .font(.system(size: islandSize + 2, weight: .bold, design: .monospaced))
                         .foregroundStyle(fontColor)
                         .contentTransition(.identity)
                         .animation(nil, value: context.state.upText)
@@ -79,14 +79,14 @@ struct SpeedIslandLiveActivity: Widget {
                 // v3.5：定宽显示（"↓ 850K" / "↓ 10.8M" 都是 6 字符），
                 // 宽度不再随网速变长变短来回跳
                 Text("↓\(fixedShort(context.state.downText))")
-                    .font(.system(size: islandSize, weight: .bold, design: .default).monospacedDigit())
+                    .font(.system(size: islandSize, weight: .bold, design: .monospaced))
                     .foregroundStyle(fontColor)
                     .contentTransition(.identity)
                     .animation(nil, value: context.state.downText)
                     .transaction { $0.animation = nil; $0.disablesAnimations = true }
             } compactTrailing: {
                 Text("↑\(fixedShort(context.state.upText))")
-                    .font(.system(size: islandSize, weight: .bold, design: .default).monospacedDigit())
+                    .font(.system(size: islandSize, weight: .bold, design: .monospaced))
                     .foregroundStyle(fontColor)
                     .contentTransition(.identity)
                     .animation(nil, value: context.state.upText)
@@ -94,7 +94,7 @@ struct SpeedIslandLiveActivity: Widget {
             } minimal: {
                 // v3.6：小圆点里地方小，用不补空格的短格式，少截断（定宽只在主岛有用）
                 Text("↓\(short(context.state.downText))")
-                    .font(.system(size: islandSize, weight: .bold, design: .default).monospacedDigit())
+                    .font(.system(size: islandSize, weight: .bold, design: .monospaced))
                     .foregroundStyle(fontColor)
                     .contentTransition(.identity)
                     .animation(nil, value: context.state.downText)
@@ -128,10 +128,11 @@ struct SpeedIslandLiveActivity: Widget {
     }
 
     private func short(_ s: String) -> String {
-        // "12.4 MB/s" -> "12.4M"，"850 KB/s" -> "850K"，"0 B/s" -> "0"
-        s.replacingOccurrences(of: " MB/s", with: "M")
+        // "12.4 MB/s" -> "12.4M"，"850 KB/s" -> "850K"
+        // v3.10：不到 1KB 的按 1KB 显示（"0 B/s" -> "1K"），岛上不出现 0
+        if s.hasSuffix(" B/s") { return "1K" }
+        return s.replacingOccurrences(of: " MB/s", with: "M")
             .replacingOccurrences(of: " KB/s", with: "K")
-            .replacingOccurrences(of: " B/s", with: "")
     }
 
     /// v2.5：hex → Color（Widget 里单独一份，主 App 的 SpeedAppearance.swift 不在 Widget target 里）

@@ -19,6 +19,7 @@ struct ContentView: View {
     @AppStorage(SpeedAppearance.fontSizeKey) private var fontSizeLevel = SpeedAppearance.defaultFontSize
     @AppStorage(SpeedAppearance.backgroundKey) private var backgroundHex = SpeedAppearance.defaultBackground
     @AppStorage(SpeedAppearance.fontWeightKey) private var fontWeightRaw = SpeedAppearance.defaultFontWeight
+    @AppStorage(SpeedAppearance.fontDesignKey) private var fontDesignRaw = SpeedAppearance.defaultFontDesign
     @State private var showAppearance = false
 
     private static let accentHex = "#6FD8F0"
@@ -57,7 +58,7 @@ struct ContentView: View {
                         .padding(.top, 18)
 
                     // 下载超大数字（mockup 里的主数字）
-                    SpeedNumberText(text: engine.downText, size: downSize(width: geo.size.width), unitScale: 0.55, fontColorHex: fontColorHex, weight: SpeedAppearance.fontWeight)
+                    SpeedNumberText(text: engine.downText, size: downSize(width: geo.size.width), unitScale: 0.55, fontColorHex: fontColorHex, weight: SpeedAppearance.fontWeight, design: SpeedAppearance.fontDesign)
                         .padding(.top, 10)
 
                     // 上传
@@ -66,7 +67,7 @@ struct ContentView: View {
                         .tracking(2)
                         .foregroundStyle(SpeedAppearance.color(hex: Self.accentHex))
                         .padding(.top, 18)
-                    SpeedNumberText(text: engine.upText, size: upSize(width: geo.size.width), unitScale: 0.55, fontColorHex: fontColorHex, weight: SpeedAppearance.fontWeight)
+                    SpeedNumberText(text: engine.upText, size: upSize(width: geo.size.width), unitScale: 0.55, fontColorHex: fontColorHex, weight: SpeedAppearance.fontWeight, design: SpeedAppearance.fontDesign)
                         .padding(.top, 2)
 
                     // 图例 + 网格曲线
@@ -89,9 +90,23 @@ struct ContentView: View {
                         .padding(.top, 12)
 
                     // v3.7：本节流量和峰值
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("本节流量  ↓ \(NetworkSpeedSampler.formatBytes(engine.totalDown))  ·  ↑ \(NetworkSpeedSampler.formatBytes(engine.totalUp))")
-                        Text("峰值速度  ↓ \(NetworkSpeedSampler.format(engine.peakDown))  ·  ↑ \(NetworkSpeedSampler.format(engine.peakUp))")
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("本节流量  ↓ \(NetworkSpeedSampler.formatBytes(engine.totalDown))  ·  ↑ \(NetworkSpeedSampler.formatBytes(engine.totalUp))")
+                            Text("峰值速度  ↓ \(NetworkSpeedSampler.format(engine.peakDown))  ·  ↑ \(NetworkSpeedSampler.format(engine.peakUp))")
+                        }
+                        Spacer()
+                        // v3.10：累计流量重置按钮（不清零就一直往上加）
+                        Button("重置") {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            engine.resetSessionStats()
+                        }
+                        .font(.caption)
+                        .foregroundStyle(SpeedAppearance.color(hex: Self.accentHex))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .overlay(Capsule().stroke(SpeedAppearance.color(hex: Self.accentHex).opacity(0.6), lineWidth: 1))
+                        .buttonStyle(.plain)
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -143,7 +158,7 @@ struct ContentView: View {
             if newPhase == .active { engine.resumeAfterBackground() }
         }
         .sheet(isPresented: $showAppearance) {
-            AppearanceSheetView(fontColorHex: $fontColorHex, fontSizeLevel: $fontSizeLevel, backgroundHex: $backgroundHex, fontWeightRaw: $fontWeightRaw) {
+            AppearanceSheetView(fontColorHex: $fontColorHex, fontSizeLevel: $fontSizeLevel, backgroundHex: $backgroundHex, fontWeightRaw: $fontWeightRaw, fontDesignRaw: $fontDesignRaw) {
                 engine.refreshAppearance()
             }
         }
@@ -199,9 +214,10 @@ struct ContentView: View {
 }
 
 /// 大号加粗网速数字：数字和单位分开渲染，单位小一号。
-/// v3.8：用户要求调用系统字体 + 加粗 —— 用系统字体（design .default），
+/// v3.8：用户要求调用系统字体 + 加粗 —— 默认系统字体（design .default），
 /// 字重从外观设置读（默认加粗）；数字加 .monospacedDigit() 让数字等宽，
 /// 数字变长变短时宽度不跳（不加这个，系统字体下 "1" 比 "8" 窄，数字会左右晃）。
+/// v3.10：字体可选手册（默认 / 圆体 / 衬线 / 等宽），从外观设置读。
 /// 不加阴影（每秒重绘的阴影是卡顿主因之一）。
 private struct SpeedNumberText: View {
     var text: String
@@ -209,6 +225,7 @@ private struct SpeedNumberText: View {
     var unitScale: CGFloat = 0.32
     var fontColorHex: String
     var weight: Font.Weight = .bold
+    var design: Font.Design = .default
 
     var body: some View {
         let parts = text.split(separator: " ")
@@ -216,10 +233,10 @@ private struct SpeedNumberText: View {
         let unit = parts.count > 1 ? String(parts[1]) : ""
         HStack(alignment: .lastTextBaseline, spacing: 4) {
             Text(digits)
-                .font(.system(size: size, weight: weight, design: .default).monospacedDigit())
+                .font(.system(size: size, weight: weight, design: design).monospacedDigit())
                 .foregroundStyle(SpeedAppearance.color(hex: fontColorHex))
             Text(unit)
-                .font(.system(size: max(size * unitScale, 11), weight: .semibold, design: .default))
+                .font(.system(size: max(size * unitScale, 11), weight: .semibold, design: design))
                 .foregroundStyle(SpeedAppearance.color(hex: fontColorHex).opacity(0.75))
         }
         .contentTransition(.identity)
@@ -316,12 +333,13 @@ private struct DashboardGraphView: View {
     }
 }
 
-/// 外观设置弹窗：字体颜色 / 字号 / 字体粗细 / 背景底色，改完立即生效（推给灵动岛 / 锁屏）。
+/// 外观设置弹窗：字体颜色 / 字号 / 字体粗细 / 字体 / 背景底色，改完立即生效（推给灵动岛 / 锁屏）。
 private struct AppearanceSheetView: View {
     @Binding var fontColorHex: String
     @Binding var fontSizeLevel: Int
     @Binding var backgroundHex: String
     @Binding var fontWeightRaw: String
+    @Binding var fontDesignRaw: String
     var onChange: () -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -364,6 +382,16 @@ private struct AppearanceSheetView: View {
                     }
                     .pickerStyle(.segmented)
                     .onChange(of: fontWeightRaw) { _, _ in onChange() }
+                }
+                Section("字体") {
+                    // v3.10：字体选择（默认系统 / 圆体 / 衬线 / 等宽），只改主界面大数字
+                    Picker("字体", selection: $fontDesignRaw) {
+                        ForEach(SpeedAppearance.fontDesignNames, id: \.self) { name in
+                            Text(name).tag(name)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: fontDesignRaw) { _, _ in onChange() }
                 }
                 Section("背景底色") {
                     HStack(spacing: 12) {

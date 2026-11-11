@@ -195,6 +195,13 @@ final class SpeedEngine: ObservableObject {
         manager.refreshAppearance(downText: downText, upText: upText, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
     }
 
+    /// v3.10：累计流量重置按钮 —— 本节流量和峰值清零，重新开始累计（不用停了再开）。
+    @MainActor
+    func resetSessionStats() {
+        totalDownBytes = 0; totalUpBytes = 0; peakDownRate = 0; peakUpRate = 0
+        totalDown = 0; totalUp = 0; peakDown = 0; peakUp = 0
+    }
+
     private func stopTimerOnly() {
         timer?.cancel()
         timer = nil

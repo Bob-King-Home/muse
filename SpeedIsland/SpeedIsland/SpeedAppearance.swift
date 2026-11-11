@@ -79,6 +79,18 @@ enum SpeedAppearance {
         default: return .bold
         }
     }
+    /// v3.10：字体选择（主界面数字用）：默认 / 圆体 / 衬线 / 等宽
+    static let fontDesignKey = "si_fontDesign"
+    static let defaultFontDesign = "默认"
+    static let fontDesignNames = ["默认", "圆体", "衬线", "等宽"]
+    static var fontDesign: Font.Design {
+        switch UserDefaults.standard.string(forKey: fontDesignKey) ?? defaultFontDesign {
+        case "圆体": return .rounded
+        case "衬线": return .serif
+        case "等宽": return .monospaced
+        default: return .default
+        }
+    }
 
     // MARK: - 字号映射
 
