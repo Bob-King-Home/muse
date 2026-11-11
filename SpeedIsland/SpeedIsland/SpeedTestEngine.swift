@@ -453,9 +453,13 @@ final class SpeedTestEngine: NSObject, ObservableObject, URLSessionDataDelegate 
               let token = obj["token"] as? String else {
             throw NSError(domain: "SpeedTest", code: -1, userInfo: [NSLocalizedDescriptionKey: "pow.php 返回异常"])
         }
-        guard let nonce = await Task.detached(priority: .userInitiated) {
+        // nonce 计算是纯 CPU 循环，放 Task.detached 跑，别堵主线程。
+        // 先把 detached 的结果取出来再 guard（guard let = await Task.detached { } .value
+        // 这种写法编译器认不出 trailing closure，报“expected 'else'”）。
+        let nonce: String? = await Task.detached(priority: .userInitiated) {
             USTCPow.solve(challenge: challenge, difficulty: difficulty)
-        }.value else {
+        }.value
+        guard let nonce else {
             throw NSError(domain: "SpeedTest", code: -2, userInfo: [NSLocalizedDescriptionKey: "POW 计算失败"])
         }
         guard let verifyURL = URL(string: base + "/backend/pow_verify.php") else { return }
