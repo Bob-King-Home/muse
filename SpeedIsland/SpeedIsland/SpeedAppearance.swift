@@ -10,12 +10,16 @@ enum SpeedAppearance {
     static let fontColorKey = "si_fontColor"
     static let fontSizeKey = "si_fontSize"
     static let backgroundKey = "si_background"
+    static let fontWeightKey = "si_fontWeight"
     static let appearanceVersionKey = "si_appearanceVersion"
     static let currentAppearanceVersion = 2
 
     static let defaultFontColor = "#FFFFFF"
     static let defaultFontSize = 1 // 0 小 / 1 中 / 2 大
     static let defaultBackground = "#0B1026"
+    /// v3.8：数字字重：常规 / 加粗 / 特粗，默认加粗（用户要求系统字体 + 加粗）
+    static let defaultFontWeight = "加粗"
+    static let fontWeightNames = ["常规", "加粗", "特粗"]
 
     /// v3.4 从白色主题换成深色仪表盘：老版本存的黑字白底在深色底上看不见，
     /// 第一次打开时一次性重置为新默认值（用户之后再改就按他的来）。
@@ -66,6 +70,14 @@ enum SpeedAppearance {
     }
     static var backgroundHex: String {
         UserDefaults.standard.string(forKey: backgroundKey) ?? defaultBackground
+    }
+    /// v3.8：数字字重（主界面数字用；灵动岛 / 锁屏默认加粗）
+    static var fontWeight: Font.Weight {
+        switch UserDefaults.standard.string(forKey: fontWeightKey) ?? defaultFontWeight {
+        case "常规": return .regular
+        case "特粗": return .black
+        default: return .bold
+        }
     }
 
     // MARK: - 字号映射

@@ -40,11 +40,20 @@ enum NetworkInfo {
     }
 
     /// 蜂窝制式：5G / 4G / 3G / 蜂窝；Wi-Fi 时返回 "Wi-Fi"。
+    /// v3.8：双卡时用数据卡的那一路（dataServiceIdentifier），不要随便取第一条 ——
+    /// 字典顺序不固定，取到副卡的 LTE 就会把正在用 5G 的主卡写成 4G。
     static func radioAccess(isWiFi: Bool) -> String {
         if isWiFi { return "Wi-Fi" }
         let info = CTTelephonyNetworkInfo()
-        guard let tech = info.serviceCurrentRadioAccessTechnology?.values.first else { return "蜂窝" }
-        switch tech {
+        let dict = info.serviceCurrentRadioAccessTechnology
+        var tech: String?
+        if let dataId = info.dataServiceIdentifier, let t = dict?[dataId] {
+            tech = t
+        } else {
+            tech = dict?.values.first
+        }
+        guard let radio = tech else { return "蜂窝" }
+        switch radio {
         case CTRadioAccessTechnologyNR, CTRadioAccessTechnologyNRNSA:
             return "5G"
         case CTRadioAccessTechnologyLTE:
@@ -60,7 +69,14 @@ enum NetworkInfo {
     }
 
     /// 运营商名字（蜂窝时用），拿不到返回 ""。
+    /// v3.8：同样用数据卡那一路，免得双卡取到副卡的运营商。
     static func carrierName() -> String {
-        CTTelephonyNetworkInfo().serviceSubscriberCellularProviders?.values.first?.carrierName ?? ""
+        let info = CTTelephonyNetworkInfo()
+        if let dataId = info.dataServiceIdentifier,
+           let name = info.serviceSubscriberCellularProviders?[dataId]?.carrierName,
+           !name.isEmpty {
+            return name
+        }
+        return info.serviceSubscriberCellularProviders?.values.first?.carrierName ?? ""
     }
 }

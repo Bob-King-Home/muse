@@ -133,9 +133,11 @@ final class NetworkSpeedSampler {
             if zeroStreak >= 2 { downSmooth = 0; upSmooth = 0 }
         } else {
             zeroStreak = 0
-            // 固定 alpha 平滑，删掉 v2.1 里“小于 0.4 就直接跳变”的分支，平滑不再被抵消
-            downSmooth = downSmooth * 0.35 + downRaw * 0.65
-            upSmooth = upSmooth * 0.35 + upRaw * 0.65
+            // v3.8：平滑系数 0.65 → 0.8，数字跟得更快（用户要求“加速”——
+            // 网速一变，显示马上跟上，少拖一两秒）。代价是数字跳得稍明显一点，
+            // 但 1 秒刷新下这个取舍值得。
+            downSmooth = downSmooth * 0.2 + downRaw * 0.8
+            upSmooth = upSmooth * 0.2 + upRaw * 0.8
         }
         return Sample(downBytesPerSec: downRaw, upBytesPerSec: upRaw, isWiFi: isWiFi, downSmoothed: downSmooth, upSmoothed: upSmooth, isVPN: cur.isVPNActive)
     }

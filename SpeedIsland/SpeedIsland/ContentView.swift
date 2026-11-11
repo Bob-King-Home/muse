@@ -18,6 +18,7 @@ struct ContentView: View {
     @AppStorage(SpeedAppearance.fontColorKey) private var fontColorHex = SpeedAppearance.defaultFontColor
     @AppStorage(SpeedAppearance.fontSizeKey) private var fontSizeLevel = SpeedAppearance.defaultFontSize
     @AppStorage(SpeedAppearance.backgroundKey) private var backgroundHex = SpeedAppearance.defaultBackground
+    @AppStorage(SpeedAppearance.fontWeightKey) private var fontWeightRaw = SpeedAppearance.defaultFontWeight
     @State private var showAppearance = false
 
     private static let accentHex = "#6FD8F0"
@@ -56,7 +57,7 @@ struct ContentView: View {
                         .padding(.top, 18)
 
                     // 下载超大数字（mockup 里的主数字）
-                    SpeedNumberText(text: engine.downText, size: downSize(width: geo.size.width), unitScale: 0.55, fontColorHex: fontColorHex)
+                    SpeedNumberText(text: engine.downText, size: downSize(width: geo.size.width), unitScale: 0.55, fontColorHex: fontColorHex, weight: SpeedAppearance.fontWeight)
                         .padding(.top, 10)
 
                     // 上传
@@ -65,7 +66,7 @@ struct ContentView: View {
                         .tracking(2)
                         .foregroundStyle(SpeedAppearance.color(hex: Self.accentHex))
                         .padding(.top, 18)
-                    SpeedNumberText(text: engine.upText, size: upSize(width: geo.size.width), unitScale: 0.55, fontColorHex: fontColorHex)
+                    SpeedNumberText(text: engine.upText, size: upSize(width: geo.size.width), unitScale: 0.55, fontColorHex: fontColorHex, weight: SpeedAppearance.fontWeight)
                         .padding(.top, 2)
 
                     // 图例 + 网格曲线
@@ -142,7 +143,7 @@ struct ContentView: View {
             if newPhase == .active { engine.resumeAfterBackground() }
         }
         .sheet(isPresented: $showAppearance) {
-            AppearanceSheetView(fontColorHex: $fontColorHex, fontSizeLevel: $fontSizeLevel, backgroundHex: $backgroundHex) {
+            AppearanceSheetView(fontColorHex: $fontColorHex, fontSizeLevel: $fontSizeLevel, backgroundHex: $backgroundHex, fontWeightRaw: $fontWeightRaw) {
                 engine.refreshAppearance()
             }
         }
@@ -197,13 +198,17 @@ struct ContentView: View {
     }
 }
 
-/// 大号加粗网速数字：数字和单位分开渲染，单位小一号，数字用 .black 字重。
+/// 大号加粗网速数字：数字和单位分开渲染，单位小一号。
+/// v3.8：用户要求调用系统字体 + 加粗 —— 用系统字体（design .default），
+/// 字重从外观设置读（默认加粗）；数字加 .monospacedDigit() 让数字等宽，
+/// 数字变长变短时宽度不跳（不加这个，系统字体下 "1" 比 "8" 窄，数字会左右晃）。
 /// 不加阴影（每秒重绘的阴影是卡顿主因之一）。
 private struct SpeedNumberText: View {
     var text: String
     var size: CGFloat
     var unitScale: CGFloat = 0.32
     var fontColorHex: String
+    var weight: Font.Weight = .bold
 
     var body: some View {
         let parts = text.split(separator: " ")
@@ -211,10 +216,10 @@ private struct SpeedNumberText: View {
         let unit = parts.count > 1 ? String(parts[1]) : ""
         HStack(alignment: .lastTextBaseline, spacing: 4) {
             Text(digits)
-                .font(.system(size: size, weight: .black, design: .monospaced))
+                .font(.system(size: size, weight: weight, design: .default).monospacedDigit())
                 .foregroundStyle(SpeedAppearance.color(hex: fontColorHex))
             Text(unit)
-                .font(.system(size: max(size * unitScale, 11), weight: .semibold, design: .monospaced))
+                .font(.system(size: max(size * unitScale, 11), weight: .semibold, design: .default))
                 .foregroundStyle(SpeedAppearance.color(hex: fontColorHex).opacity(0.75))
         }
         .contentTransition(.identity)
@@ -311,11 +316,12 @@ private struct DashboardGraphView: View {
     }
 }
 
-/// 外观设置弹窗：字体颜色 / 字号 / 背景底色，改完立即生效（推给灵动岛 / 锁屏）。
+/// 外观设置弹窗：字体颜色 / 字号 / 字体粗细 / 背景底色，改完立即生效（推给灵动岛 / 锁屏）。
 private struct AppearanceSheetView: View {
     @Binding var fontColorHex: String
     @Binding var fontSizeLevel: Int
     @Binding var backgroundHex: String
+    @Binding var fontWeightRaw: String
     var onChange: () -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -348,6 +354,16 @@ private struct AppearanceSheetView: View {
                     }
                     .pickerStyle(.segmented)
                     .onChange(of: fontSizeLevel) { _, _ in onChange() }
+                }
+                Section("字体粗细") {
+                    // v3.8：用户要求系统字体 + 加粗可调
+                    Picker("字体粗细", selection: $fontWeightRaw) {
+                        ForEach(SpeedAppearance.fontWeightNames, id: \.self) { name in
+                            Text(name).tag(name)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: fontWeightRaw) { _, _ in onChange() }
                 }
                 Section("背景底色") {
                     HStack(spacing: 12) {

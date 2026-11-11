@@ -28,7 +28,7 @@ struct SpeedIslandLiveActivity: Widget {
                     Text("↑ \(context.state.upText)")
                         .animation(nil, value: context.state.upText)
                 }
-                .font(.system(size: lockSize, design: .monospaced))
+                .font(.system(size: lockSize, weight: .bold, design: .default).monospacedDigit())
                 .foregroundStyle(fontColor)
                 // v3.2：数字直接切换，不淡入淡出
                 .contentTransition(.identity)
@@ -50,7 +50,7 @@ struct SpeedIslandLiveActivity: Widget {
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     Text("↓ \(context.state.downText)")
-                        .font(.system(size: islandSize + 2, design: .monospaced))
+                        .font(.system(size: islandSize + 2, weight: .bold, design: .default).monospacedDigit())
                         .foregroundStyle(fontColor)
                         .contentTransition(.identity)
                         .animation(nil, value: context.state.downText)
@@ -58,7 +58,7 @@ struct SpeedIslandLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     Text("↑ \(context.state.upText)")
-                        .font(.system(size: islandSize + 2, design: .monospaced))
+                        .font(.system(size: islandSize + 2, weight: .bold, design: .default).monospacedDigit())
                         .foregroundStyle(fontColor)
                         .contentTransition(.identity)
                         .animation(nil, value: context.state.upText)
@@ -79,14 +79,14 @@ struct SpeedIslandLiveActivity: Widget {
                 // v3.5：定宽显示（"↓ 850K" / "↓ 10.8M" 都是 6 字符），
                 // 宽度不再随网速变长变短来回跳
                 Text("↓\(fixedShort(context.state.downText))")
-                    .font(.system(size: islandSize, design: .monospaced))
+                    .font(.system(size: islandSize, weight: .bold, design: .default).monospacedDigit())
                     .foregroundStyle(fontColor)
                     .contentTransition(.identity)
                     .animation(nil, value: context.state.downText)
                     .transaction { $0.animation = nil; $0.disablesAnimations = true }
             } compactTrailing: {
                 Text("↑\(fixedShort(context.state.upText))")
-                    .font(.system(size: islandSize, design: .monospaced))
+                    .font(.system(size: islandSize, weight: .bold, design: .default).monospacedDigit())
                     .foregroundStyle(fontColor)
                     .contentTransition(.identity)
                     .animation(nil, value: context.state.upText)
@@ -94,7 +94,7 @@ struct SpeedIslandLiveActivity: Widget {
             } minimal: {
                 // v3.6：小圆点里地方小，用不补空格的短格式，少截断（定宽只在主岛有用）
                 Text("↓\(short(context.state.downText))")
-                    .font(.system(size: islandSize, design: .monospaced))
+                    .font(.system(size: islandSize, weight: .bold, design: .default).monospacedDigit())
                     .foregroundStyle(fontColor)
                     .contentTransition(.identity)
                     .animation(nil, value: context.state.downText)

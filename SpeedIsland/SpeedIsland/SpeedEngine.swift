@@ -122,14 +122,17 @@ final class SpeedEngine: ObservableObject {
         peakUpRate = max(peakUpRate, s.upSmoothed)
         tickCount += 1
         // v3.6：网络信息每秒都刷新（原来 5 秒一次），切 5G/Wi-Fi 立刻感知。
-        // IP/制式/运营商是同步读，很便宜；SSID 是异步回调，Wi-Fi 下每 5 秒查一次。
+        // IP/制式/运营商是同步读，很便宜；SSID 是异步回调。
+        // v3.8：SSID 没拿到时每秒都重试（fetchCurrent 头几次常返回空），
+        // 拿到以后每 5 秒查一次有没有换网 —— 之前只每 5 秒查一次，
+        // 拿不到就一直空着，Wi-Fi 名出不来。
         // 注意：SSID 回调不一定在主线程，统一 dispatch 到主线程再写 @Published。
         let ip = NetworkInfo.currentIP(isWiFi: s.isWiFi)
         let radio = NetworkInfo.radioAccess(isWiFi: s.isWiFi)
         let carrier = NetworkInfo.carrierName()
         let netType = s.isWiFi ? "Wi-Fi" : radio
         let netChanged = netType != lastNetType || ip != lastIP || carrier != lastCarrier || s.isWiFi != lastIsWiFi
-        if tickCount % 5 == 1, s.isWiFi {
+        if s.isWiFi && (ssid.isEmpty || tickCount % 5 == 1) {
             NetworkInfo.fetchSSID { [weak self] ssid in
                 DispatchQueue.main.async { [weak self] in
                     guard let self, self.isRunning else { return }
@@ -144,11 +147,18 @@ final class SpeedEngine: ObservableObject {
         let u = NetworkSpeedSampler.format(s.upSmoothed)
         let now = Date()
         let changed = d != lastDownText || u != lastUpText || netChanged
-        // 心跳：文字不变也每 4 秒推一次，不然灵动岛 5 秒就 stale
-        let heartbeatDue = now.timeIntervalSince(lastPush) >= 4.0
+        let sinceLastPush = now.timeIntervalSince(lastPush)
+        // v3.8：灵动岛限速 —— iOS 会对持续每秒推送的 Live Activity 限流，
+        // 1~2 分钟后岛就只剩 ~10 秒动一次（用户实测；锁屏是按需渲染所以看着正常）。
+        // 主界面数字仍每秒刷新；岛每 2 秒最多推一次，留在系统预算内，岛才能一直动。
+        // 心跳：文字不变也每 4 秒推一次，不然灵动岛 5 秒就 stale。
+        let islandDue = changed && sinceLastPush >= 2.0
+        let heartbeatDue = sinceLastPush >= 4.0
+        let pushIsland = islandDue || heartbeatDue
         guard changed || heartbeatDue else { return }
-        lastDownText = d; lastUpText = u; lastIsWiFi = s.isWiFi; lastPush = now
+        lastDownText = d; lastUpText = u; lastIsWiFi = s.isWiFi
         lastNetType = netType; lastIP = ip; lastCarrier = carrier
+        if pushIsland { lastPush = now }
 
         // 后台队列不读 @Published，只用本地 lastIsWiFi，避免数据竞争
         DispatchQueue.main.async { [weak self] in
@@ -166,9 +176,12 @@ final class SpeedEngine: ObservableObject {
             self.netType = netType
             self.carrier = carrier
             if !s.isWiFi { self.ssid = "" }
+            // v3.8：岛按 2 秒限速推（上面 pushIsland 决定），主界面数字每秒都刷新。
             // v2.6：8 小时到期自动续期。不要只看 manager.isActive（系统结束 Activity 时
             // 它不会变 false），ensureActive() 每次都查系统里还活着的 Activity，没有就重建。
-            self.manager.ensureActive(downText: d, upText: u, down: s.downSmoothed, up: s.upSmoothed, isWiFi: s.isWiFi, ssid: self.ssid, ip: ip, netType: netType, carrier: carrier)
+            if pushIsland {
+                self.manager.ensureActive(downText: d, upText: u, down: s.downSmoothed, up: s.upSmoothed, isWiFi: s.isWiFi, ssid: self.ssid, ip: ip, netType: netType, carrier: carrier)
+            }
         }
     }
 
