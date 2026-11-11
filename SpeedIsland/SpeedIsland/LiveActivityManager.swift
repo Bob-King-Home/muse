@@ -169,14 +169,16 @@ final class LiveActivityManager: ObservableObject {
     /// v3.16：重建加速 + 后台失败不丢岛 —— 先开新岛，成功了再结束旧岛。
     /// 新岛 request 在后台失败时旧岛还在（岛上继续显示旧速度），下一秒 tick 会再试；
     /// 不会像 v3.15 那样旧岛先结束、新岛又开失败，岛直接空掉，非要点开 App 才恢复。
-    /// 调用方（Engine 每 5 分钟调一次）需传入当前速度与网络信息。
+    /// v3.19：重建不再重置 sessionStart（用户 2026-11-12：重建要用户无感知）。
+    /// 之前每次重建都把 sessionStart 设成现在，“已运行”计时每 5 分钟跳回 00:00，
+    /// 用户一眼就能看出来重建了。sessionStart 只在 start()（用户点开始）时重置。
+    /// 调用方（Engine 每 2 分钟调一次）需传入当前速度与网络信息。
     func restart(downText: String, upText: String, isWiFi: Bool, ssid: String = "", ip: String = "", netType: String = "Wi-Fi", carrier: String = "") {
         guard activity != nil else { return }
         startTask?.cancel()
         updateTask?.cancel()
         startTask = Task {
             let old = activity
-            sessionStart = Date()
             let attrs = SpeedActivityAttributes()
             let state = currentState(downText: downText, upText: upText, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
             // 后台 request 偶尔会失败一次（系统忙），失败就 2 秒后再试一次；
@@ -197,7 +199,7 @@ final class LiveActivityManager: ObservableObject {
                     }
                 }
             }
-            // 两次都失败：旧岛还在，先不报错（下一秒 tick 会再试重建），
+            // 两次都失败：旧岛还在，先不报错（下一秒 tick / 下次 2 分钟会再试重建），
             // 避免 App 里一直挂着“重建失败”。注意 activity 仍指向旧岛。
             errorMessage = nil
         }
