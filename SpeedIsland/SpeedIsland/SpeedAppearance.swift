@@ -1,19 +1,19 @@
 import SwiftUI
 
-/// v2.5 外观自定义：字体颜色 / 字号 / 背景底色，用户在 App 里直接改，不用重装。
+/// v3.1 白色主题（18 Pro Max 大屏）：默认白底黑字，字号放大；
+/// 字体颜色只给深色（白底上看得清），背景底色只给浅色。
 /// 存法：主 App 的 UserDefaults（普通 key，不用 App Group）。
 /// 灵动岛 / 锁屏拿不到 App 的 UserDefaults，所以这三个值放进
 /// SpeedActivityAttributes.ContentState，每次 start/update 一起推过去，
 /// Widget 只读 ContentState 里的值，不读 UserDefaults。
-/// 画中画在主 App 进程里，直接读 UserDefaults，不用走 ContentState。
 enum SpeedAppearance {
     static let fontColorKey = "si_fontColor"
     static let fontSizeKey = "si_fontSize"
     static let backgroundKey = "si_background"
 
-    static let defaultFontColor = "#FFFFFF"
+    static let defaultFontColor = "#000000"
     static let defaultFontSize = 1 // 0 小 / 1 中 / 2 大
-    static let defaultBackground = "#000000"
+    static let defaultBackground = "#FFFFFF"
 
     struct Option: Identifiable {
         let id: String
@@ -21,23 +21,23 @@ enum SpeedAppearance {
         let hex: String
     }
 
-    /// 字体颜色：只给亮色，配深色底都看得清
+    /// 字体颜色：只给深色，配白色底都看得清
     static let fontColors: [Option] = [
-        .init(id: "white", name: "白", hex: "#FFFFFF"),
-        .init(id: "yellow", name: "黄", hex: "#FFD60A"),
-        .init(id: "green", name: "绿", hex: "#30D158"),
-        .init(id: "cyan", name: "青", hex: "#64D2FF"),
-        .init(id: "orange", name: "橙", hex: "#FF9F0A"),
-        .init(id: "red", name: "红", hex: "#FF453A"),
+        .init(id: "black", name: "黑", hex: "#000000"),
+        .init(id: "darkgray", name: "深灰", hex: "#3A3A3C"),
+        .init(id: "blue", name: "蓝", hex: "#007AFF"),
+        .init(id: "green", name: "绿", hex: "#248A3D"),
+        .init(id: "red", name: "红", hex: "#D70015"),
+        .init(id: "orange", name: "橙", hex: "#C93400"),
     ]
 
-    /// 背景底色：只给深色，亮字在上面都看得清
+    /// 背景底色：只给浅色，深字在上面都看得清
     static let backgrounds: [Option] = [
-        .init(id: "black", name: "黑", hex: "#000000"),
-        .init(id: "darkgray", name: "深灰", hex: "#1C1C1E"),
-        .init(id: "navy", name: "藏青", hex: "#0A1931"),
-        .init(id: "darkgreen", name: "深绿", hex: "#0B2E1F"),
-        .init(id: "darkpurple", name: "深紫", hex: "#1E0A33"),
+        .init(id: "white", name: "白", hex: "#FFFFFF"),
+        .init(id: "lightgray", name: "浅灰", hex: "#F2F2F7"),
+        .init(id: "lightblue", name: "浅蓝", hex: "#E5F1FF"),
+        .init(id: "lightgreen", name: "浅绿", hex: "#E6F4EA"),
+        .init(id: "lightyellow", name: "浅黄", hex: "#FFF8E1"),
     ]
 
     static let fontSizeNames = ["小", "中", "大"]
@@ -57,14 +57,9 @@ enum SpeedAppearance {
 
     // MARK: - 字号映射
 
-    /// 主界面数字字号
+    /// 主界面数字字号（v3.1：18 Pro Max 大屏放大）
     static func mainFontSize(level: Int) -> CGFloat {
-        [18, 22, 28][clamped(level)]
-    }
-    /// 画中画第一行字号（320 宽：大号 26pt 时“↓ 12.4M  ↑ 850K”约 234pt，仍放得下；
-    /// 之前注释写“约 203pt”是按 13 字符算错了，实际 15 字符，结论不变）
-    static func pipFontSize(level: Int) -> CGFloat {
-        [18, 22, 26][clamped(level)]
+        [28, 36, 46][clamped(level)]
     }
     /// 灵动岛紧凑 / 最小模式字号（v2.4 已加大到 12pt；大号 13pt 约 47pt 宽，仍在单侧宽度内）
     static func islandFontSize(level: Int) -> CGFloat {
