@@ -89,21 +89,35 @@ struct SpeedIslandLiveActivity: Widget {
                     }
                 }
             } compactLeading: {
-                // v3.5：定宽显示（"↓ 850K" / "↓ 10.8M" 都是 6 字符），
-                // 宽度不再随网速变长变短来回跳
-                Text("↓\(fixedShort(context.state.downText))")
-                    .font(.system(size: islandSize, weight: .bold, design: .monospaced))
-                    .foregroundStyle(fontColor)
-                    .contentTransition(.identity)
-                    .animation(nil, value: context.state.downText)
-                    .transaction { $0.animation = nil; $0.disablesAnimations = true }
+                // v3.16：定宽改用固定宽度框 + 右对齐，不再用前导空格补位。
+                // 前导空格在灵动岛里会被系统吞掉/渲染不一致，数字长度一变，
+                // 文本宽度跟着变，看起来就是“从右往左刷”。固定框 + 右对齐后，
+                // 箭头和数字最右一位永远不动，只有数字向左伸长。
+                HStack(spacing: 1) {
+                    Text("↓")
+                        .font(.system(size: islandSize, weight: .bold, design: .monospaced))
+                        .foregroundStyle(fontColor)
+                    Text(truncShort(context.state.downText))
+                        .font(.system(size: islandSize, weight: .bold, design: .monospaced))
+                        .foregroundStyle(fontColor)
+                        .frame(width: islandSize * 3.2, alignment: .trailing)
+                        .contentTransition(.identity)
+                        .animation(nil, value: context.state.downText)
+                        .transaction { $0.animation = nil; $0.disablesAnimations = true }
+                }
             } compactTrailing: {
-                Text("↑\(fixedShort(context.state.upText))")
-                    .font(.system(size: islandSize, weight: .bold, design: .monospaced))
-                    .foregroundStyle(fontColor)
-                    .contentTransition(.identity)
-                    .animation(nil, value: context.state.upText)
-                    .transaction { $0.animation = nil; $0.disablesAnimations = true }
+                HStack(spacing: 1) {
+                    Text("↑")
+                        .font(.system(size: islandSize, weight: .bold, design: .monospaced))
+                        .foregroundStyle(fontColor)
+                    Text(truncShort(context.state.upText))
+                        .font(.system(size: islandSize, weight: .bold, design: .monospaced))
+                        .foregroundStyle(fontColor)
+                        .frame(width: islandSize * 3.2, alignment: .trailing)
+                        .contentTransition(.identity)
+                        .animation(nil, value: context.state.upText)
+                        .transaction { $0.animation = nil; $0.disablesAnimations = true }
+                }
             } minimal: {
                 // v3.6：小圆点里地方小，用不补空格的短格式，少截断（定宽只在主岛有用）
                 Text("↓\(short(context.state.downText))")
@@ -126,9 +140,10 @@ struct SpeedIslandLiveActivity: Widget {
         }
     }
 
-    /// v3.5：定宽短格式。先缩成 "12.4M" / "850K" / "0"，再补空格到 5 字符，
-    /// 等宽字体下宽度恒定，灵动岛不再一会长一会短。
-    private func fixedShort(_ s: String) -> String {
+    /// v3.16：截断短格式（不补空格）。配合固定宽度框 + 右对齐使用，
+    /// 数字最右一位永远不动。fixedShort 的前导空格在灵动岛里会被系统吞掉，
+    /// 导致宽度来回变、看起来从右往左刷，所以不再用它。
+    private func truncShort(_ s: String) -> String {
         var t = short(s)
         if t.count > 5, let dot = t.firstIndex(of: ".") {
             // "1234.5M" -> "1234M"（去小数点保宽度）
@@ -136,8 +151,8 @@ struct SpeedIslandLiveActivity: Widget {
             let unit = t.last.map { String($0) } ?? ""
             t = String(intPart) + unit
         }
-        if t.count >= 5 { return String(t.prefix(5)) }
-        return String(repeating: " ", count: 5 - t.count) + t
+        if t.count > 5 { return String(t.prefix(5)) }
+        return t
     }
 
     private func short(_ s: String) -> String {
