@@ -219,7 +219,8 @@ private struct SpeedDialView: View {
     }
     private func angle(fraction f: Double) -> Double { 180 - f * 180 }
     private func point(cx: CGFloat, cy: CGFloat, radius: CGFloat, fraction f: Double) -> CGPoint {
-        let a = angle(fraction: f) * .pi / 180
+        // 注意：a 必须是 CGFloat，否则 cos(a) 在 CGFloat/Double 两个重载间有歧义，编不过
+        let a = CGFloat(angle(fraction: f)) * CGFloat.pi / 180
         return CGPoint(x: cx + radius * cos(a), y: cy - radius * sin(a))
     }
 
@@ -284,7 +285,8 @@ private struct DialTickMark: View {
     var angle: Double
 
     var body: some View {
-        let a = angle * .pi / 180
+        // 注意：a 必须是 CGFloat，否则 cos(a) 在 CGFloat/Double 两个重载间有歧义，编不过
+        let a = CGFloat(angle) * CGFloat.pi / 180
         let p1 = CGPoint(x: center.x + (r - 16) * cos(a), y: center.y - (r - 16) * sin(a))
         let p2 = CGPoint(x: center.x + (r - 6) * cos(a), y: center.y - (r - 6) * sin(a))
         ZStack {
