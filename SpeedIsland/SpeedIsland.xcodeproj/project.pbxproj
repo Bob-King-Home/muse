@@ -55,9 +55,11 @@
 			files = (
 			);
 			inputPaths = (
+				"$(SRCROOT)/SpeedIsland/AppIcon.png.b64",
 			);
 			name = "Decode App icon";
 			outputPaths = (
+				"$(SRCROOT)/SpeedIsland/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
