@@ -42,6 +42,11 @@ final class SpeedEngine: ObservableObject {
     private var lastUpText = ""
     private var lastPush = Date.distantPast
     private var lastIsWiFi = true
+    /// v3.6：上次推给界面的网络信息——切 5G/Wi-Fi 时这些变了就要立刻推，
+    /// 不能只看速度变没变
+    private var lastNetType = "Wi-Fi"
+    private var lastIP = ""
+    private var lastCarrier = ""
     private var powerObserver: NSObjectProtocol?
     private static let wasRunningKey = "SpeedIsland.wasRunning"
 
@@ -59,6 +64,7 @@ final class SpeedEngine: ObservableObject {
         upHistoryBuffer = []; upHistory = []
         tickCount = 0
         ssid = ""; ip = ""; netType = "Wi-Fi"; carrier = ""
+        lastNetType = "Wi-Fi"; lastIP = ""; lastCarrier = ""
         startTimerOnly()
         // v3.5：约好后台刷新看门狗（系统定时把 App 拉起来推一次灵动岛），
         // 这样 App 万一被游戏等挤掉，也能自己恢复，不用等用户手动打开
@@ -100,17 +106,35 @@ final class SpeedEngine: ObservableObject {
         if historyBuffer.count > 60 { historyBuffer.removeFirst(historyBuffer.count - 60) }
         upHistoryBuffer.append(s.upSmoothed)
         if upHistoryBuffer.count > 60 { upHistoryBuffer.removeFirst(upHistoryBuffer.count - 60) }
-        // v3.5：网络信息每 5 秒刷新一次（SSID 是异步回调，IP/制式/运营商是同步读）
         tickCount += 1
-        if tickCount % 5 == 1 { refreshNetworkInfo(isWiFi: s.isWiFi) }
+        // v3.6：网络信息每秒都刷新（原来 5 秒一次），切 5G/Wi-Fi 立刻感知。
+        // IP/制式/运营商是同步读，很便宜；SSID 是异步回调，Wi-Fi 下每 5 秒查一次。
+        // 注意：SSID 回调不一定在主线程，统一 dispatch 到主线程再写 @Published。
+        let ip = NetworkInfo.currentIP(isWiFi: s.isWiFi)
+        let radio = NetworkInfo.radioAccess(isWiFi: s.isWiFi)
+        let carrier = NetworkInfo.carrierName()
+        let netType = s.isWiFi ? "Wi-Fi" : radio
+        let netChanged = netType != lastNetType || ip != lastIP || carrier != lastCarrier || s.isWiFi != lastIsWiFi
+        if tickCount % 5 == 1, s.isWiFi {
+            NetworkInfo.fetchSSID { [weak self] ssid in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.isRunning else { return }
+                    guard ssid != self.ssid else { return }
+                    self.ssid = ssid
+                    // SSID 变了也马上推一次灵动岛，不等下一秒
+                    self.manager.refreshAppearance(downText: self.downText, upText: self.upText, isWiFi: self.isWiFi, ssid: ssid, ip: self.ip, netType: self.netType, carrier: self.carrier)
+                }
+            }
+        }
         let d = NetworkSpeedSampler.format(s.downSmoothed)
         let u = NetworkSpeedSampler.format(s.upSmoothed)
         let now = Date()
-        let changed = d != lastDownText || u != lastUpText || s.isWiFi != lastIsWiFi
+        let changed = d != lastDownText || u != lastUpText || netChanged
         // 心跳：文字不变也每 4 秒推一次，不然灵动岛 5 秒就 stale
         let heartbeatDue = now.timeIntervalSince(lastPush) >= 4.0
         guard changed || heartbeatDue else { return }
         lastDownText = d; lastUpText = u; lastIsWiFi = s.isWiFi; lastPush = now
+        lastNetType = netType; lastIP = ip; lastCarrier = carrier
 
         // 后台队列不读 @Published，只用本地 lastIsWiFi，避免数据竞争
         DispatchQueue.main.async { [weak self] in
@@ -121,32 +145,13 @@ final class SpeedEngine: ObservableObject {
             self.downHistory = self.historyBuffer
             self.upHistory = self.upHistoryBuffer
             self.downBytesPerSec = s.downSmoothed
-            // v2.6：8 小时到期自动续期。不要只看 manager.isActive（系统结束 Activity 时
-            // 它不会变 false），ensureActive() 每次都查系统里还活着的 Activity，没有就重建。
-            self.manager.ensureActive(downText: d, upText: u, down: s.downSmoothed, up: s.upSmoothed, isWiFi: s.isWiFi, ssid: self.ssid, ip: self.ip, netType: self.netType, carrier: self.carrier)
-        }
-    }
-
-    /// v3.5：刷新网络信息。IP/制式/运营商同步读完先发布；SSID 异步回来再补。
-    /// 注意：SSID 回调不一定在主线程，统一 dispatch 到主线程再写 @Published。
-    private func refreshNetworkInfo(isWiFi: Bool) {
-        let ip = NetworkInfo.currentIP(isWiFi: isWiFi)
-        let radio = NetworkInfo.radioAccess(isWiFi: isWiFi)
-        let carrier = NetworkInfo.carrierName()
-        let netType = isWiFi ? "Wi-Fi" : radio
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
             self.ip = ip
             self.netType = netType
             self.carrier = carrier
-            // v3.6：切到蜂窝后把旧 SSID 清掉，不然还显示上一个 Wi-Fi 的名字
-            if !isWiFi { self.ssid = "" }
-        }
-        guard isWiFi else { return }
-        NetworkInfo.fetchSSID { [weak self] ssid in
-            DispatchQueue.main.async {
-                self?.ssid = ssid
-            }
+            if !s.isWiFi { self.ssid = "" }
+            // v2.6：8 小时到期自动续期。不要只看 manager.isActive（系统结束 Activity 时
+            // 它不会变 false），ensureActive() 每次都查系统里还活着的 Activity，没有就重建。
+            self.manager.ensureActive(downText: d, upText: u, down: s.downSmoothed, up: s.upSmoothed, isWiFi: s.isWiFi, ssid: self.ssid, ip: ip, netType: netType, carrier: carrier)
         }
     }
 
@@ -184,6 +189,7 @@ final class SpeedEngine: ObservableObject {
         downBytesPerSec = 0
         ssid = ""; ip = ""; netType = "Wi-Fi"; carrier = ""
         lastDownText = ""; lastUpText = ""; lastPush = .distantPast
+        lastNetType = "Wi-Fi"; lastIP = ""; lastCarrier = ""
     }
 
     /// v3.5：从后台/全屏游戏切回来时恢复。App 可能在后台被挂起甚至被系统杀掉过，
