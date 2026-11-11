@@ -139,6 +139,8 @@ final class SpeedEngine: ObservableObject {
             self.ip = ip
             self.netType = netType
             self.carrier = carrier
+            // v3.6：切到蜂窝后把旧 SSID 清掉，不然还显示上一个 Wi-Fi 的名字
+            if !isWiFi { self.ssid = "" }
         }
         guard isWiFi else { return }
         NetworkInfo.fetchSSID { [weak self] ssid in

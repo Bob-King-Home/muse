@@ -29,7 +29,10 @@ final class NetworkSpeedSampler {
     private var timebaseCached = false
 
     private let monitor = NWPathMonitor()
-    private(set) var isWiFi = true
+    /// v3.6：默认 false，别默认 true——默认 true 会让蜂窝下也显示 Wi-Fi，
+    /// 采样去读 en0 的计数（蜂窝流量在 pdp_ip 上），速度就一直是 0。
+    /// 启动后立刻按当前路径校准一次，之后的更新走 pathUpdateHandler。
+    private(set) var isWiFi = false
     private(set) var isVPN = false
 
     init() {
@@ -48,6 +51,10 @@ final class NetworkSpeedSampler {
             self.isVPN = path.usesInterfaceType(.other) && path.availableInterfaces.contains { $0.name.hasPrefix("utun") }
         }
         monitor.start(queue: DispatchQueue(label: "speed.path", qos: .utility))
+        // v3.6：启动后立刻按当前路径校准一次，别等第一次回调（回调来之前
+        // 默认值会让蜂窝下错显示 Wi-Fi、采样读错接口导致速度一直是 0）。
+        isWiFi = monitor.currentPath.usesInterfaceType(.wifi)
+        isVPN = monitor.currentPath.usesInterfaceType(.other)
     }
 
     deinit { monitor.cancel() }
