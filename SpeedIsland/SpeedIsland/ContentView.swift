@@ -8,6 +8,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var engine = SpeedEngine()
     @ObservedObject private var manager = LiveActivityManager.shared
+    @ObservedObject private var keepAlive = LocationKeepAlive.shared
 
     @AppStorage(SpeedAppearance.fontColorKey) private var fontColorHex = SpeedAppearance.defaultFontColor
     @AppStorage(SpeedAppearance.fontSizeKey) private var fontSizeLevel = SpeedAppearance.defaultFontSize
@@ -57,6 +58,9 @@ struct ContentView: View {
                     .controlSize(.large)
 
                     Text(manager.isActive ? "运行中 · \(engine.intervalText)刷新" : "已停止")
+                        .font(.caption).foregroundStyle(.secondary)
+
+                    Text(keepAlive.statusText)
                         .font(.caption).foregroundStyle(.secondary)
 
                     if let err = engine.errorMessage ?? manager.errorMessage {
@@ -138,7 +142,7 @@ struct ContentView: View {
                     .background(Color.gray.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 14))
 
-                    Text("回到主页面后由系统后台刷新定期更新灵动岛；打开 App 时每秒刷新。想一直看最新速度就打开 App。")
+                    Text("开始后定位保活让 App 在后台持续运行，灵动岛每秒刷新；状态栏会显示定位箭头。点停止后保活结束，箭头消失。")
                         .font(.caption2).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }

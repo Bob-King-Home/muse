@@ -36,6 +36,9 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
+		<string>location</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>SpeedIsland 需要在后台使用定位来保持运行，这样回到主页面后灵动岛上的网速才能每秒刷新。位置仅用于保持后台运行，不会记录或上传。</string>
 </dict>
 </plist>

@@ -21,6 +21,7 @@ final class SpeedEngine: ObservableObject {
 
     private let sampler = NetworkSpeedSampler()
     private let manager = LiveActivityManager.shared
+    private let keepAlive = LocationKeepAlive.shared
     private var timer: DispatchSourceTimer?
     private let queue = DispatchQueue(label: "speed.engine", qos: .utility)
     private var lastDownText = ""
@@ -41,6 +42,8 @@ final class SpeedEngine: ObservableObject {
         sampler.reset()
         lastDownText = ""; lastUpText = ""; lastPush = .distantPast
         startTimerOnly()
+        // v3.3：定位保活和采样一起开（前台点开始，系统允许后台继续定位）
+        keepAlive.start()
         // 只注册一次，token 保存好，stop() 时按 token 删
         if powerObserver == nil {
             powerObserver = NotificationCenter.default.addObserver(
@@ -114,6 +117,7 @@ final class SpeedEngine: ObservableObject {
         isRunning = false
         UserDefaults.standard.set(false, forKey: Self.wasRunningKey)
         stopTimerOnly()
+        keepAlive.stop()
         if let token = powerObserver {
             NotificationCenter.default.removeObserver(token)
             powerObserver = nil
