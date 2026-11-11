@@ -139,9 +139,10 @@ final class NetworkSpeedSampler {
     }
 
     static func format(_ bytesPerSec: Double) -> String {
-        // v2.1 把 <10 B/s 都显示成 0 B/s 是错的，改成按实际值显示
+        // v3.1：按用户要求只显示整数 KB、MB 只留一位小数：130 KB/s、2.4 MB/s，
+        // 不再显示 82.3 KB/s 这类小数。
         if bytesPerSec < 1024 { return String(format: "%.0f B/s", bytesPerSec) }
-        if bytesPerSec < 1024 * 1024 { return String(format: "%.1f KB/s", bytesPerSec / 1024) }
+        if bytesPerSec < 1024 * 1024 { return String(format: "%.0f KB/s", bytesPerSec / 1024) }
         return String(format: "%.1f MB/s", bytesPerSec / 1024 / 1024)
     }
 }

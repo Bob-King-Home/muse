@@ -22,10 +22,15 @@ struct SpeedIslandLiveActivity: Widget {
                 .foregroundStyle(fontColor)
                 HStack(spacing: 16) {
                     Label("↓ \(context.state.downText)", systemImage: "arrow.down")
+                        .animation(nil, value: context.state.downText)
                     Label("↑ \(context.state.upText)", systemImage: "arrow.up")
+                        .animation(nil, value: context.state.upText)
                 }
                 .font(.system(size: lockSize, design: .monospaced))
                 .foregroundStyle(fontColor)
+                // v3.2：数字直接切换，不淡入淡出
+                .contentTransition(.identity)
+                .transaction { $0.animation = nil; $0.disablesAnimations = true }
             }
             .padding(12)
             .activityBackgroundTint(color(hex: context.state.backgroundHex).opacity(0.85))
@@ -38,11 +43,17 @@ struct SpeedIslandLiveActivity: Widget {
                     Text("↓ \(context.state.downText)")
                         .font(.system(size: islandSize + 2, design: .monospaced))
                         .foregroundStyle(fontColor)
+                        .contentTransition(.identity)
+                        .animation(nil, value: context.state.downText)
+                        .transaction { $0.animation = nil; $0.disablesAnimations = true }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     Text("↑ \(context.state.upText)")
                         .font(.system(size: islandSize + 2, design: .monospaced))
                         .foregroundStyle(fontColor)
+                        .contentTransition(.identity)
+                        .animation(nil, value: context.state.upText)
+                        .transaction { $0.animation = nil; $0.disablesAnimations = true }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     Text(context.state.isWiFi ? "Wi-Fi" : "蜂窝")
@@ -53,14 +64,23 @@ struct SpeedIslandLiveActivity: Widget {
                 Text("↓\(short(context.state.downText))")
                     .font(.system(size: islandSize, design: .monospaced))
                     .foregroundStyle(fontColor)
+                    .contentTransition(.identity)
+                    .animation(nil, value: context.state.downText)
+                    .transaction { $0.animation = nil; $0.disablesAnimations = true }
             } compactTrailing: {
                 Text("↑\(short(context.state.upText))")
                     .font(.system(size: islandSize, design: .monospaced))
                     .foregroundStyle(fontColor)
+                    .contentTransition(.identity)
+                    .animation(nil, value: context.state.upText)
+                    .transaction { $0.animation = nil; $0.disablesAnimations = true }
             } minimal: {
                 Text("↓\(short(context.state.downText))")
                     .font(.system(size: islandSize, design: .monospaced))
                     .foregroundStyle(fontColor)
+                    .contentTransition(.identity)
+                    .animation(nil, value: context.state.downText)
+                    .transaction { $0.animation = nil; $0.disablesAnimations = true }
             }
         }
     }

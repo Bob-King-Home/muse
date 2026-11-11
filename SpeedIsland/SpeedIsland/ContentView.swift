@@ -1,8 +1,10 @@
 import SwiftUI
 
-// v3.1：白色简洁版（18 Pro Max）— 白底黑字、数字放大；
+// v3.2：白色简洁版（18 Pro Max）— 白底黑字、数字放大；
 // 画中画已移除，没有悬浮小窗按钮；外观设置收进可折叠区，默认收起，主界面只剩
 // 速度、开始/停止、状态三行。
+// v3.2：网速数字直接切换，不做淡入淡出（见下方两个速度 Text 的
+// .contentTransition(.identity) + .transaction disablesAnimations）。
 struct ContentView: View {
     @StateObject private var engine = SpeedEngine()
     @ObservedObject private var manager = LiveActivityManager.shared
@@ -30,6 +32,10 @@ struct ContentView: View {
                                 .font(.system(size: SpeedAppearance.mainFontSize(level: fontSizeLevel), design: .monospaced))
                                 .bold()
                                 .foregroundStyle(SpeedAppearance.color(hex: fontColorHex))
+                                // v3.2：数字直接切换，不淡入淡出
+                                .contentTransition(.identity)
+                                .animation(nil, value: engine.downText)
+                                .transaction { $0.animation = nil; $0.disablesAnimations = true }
                         }
                         VStack {
                             Text("↑ 上传").font(.caption).foregroundStyle(.secondary)
@@ -37,6 +43,10 @@ struct ContentView: View {
                                 .font(.system(size: SpeedAppearance.mainFontSize(level: fontSizeLevel), design: .monospaced))
                                 .bold()
                                 .foregroundStyle(SpeedAppearance.color(hex: fontColorHex))
+                                // v3.2：数字直接切换，不淡入淡出
+                                .contentTransition(.identity)
+                                .animation(nil, value: engine.upText)
+                                .transaction { $0.animation = nil; $0.disablesAnimations = true }
                         }
                     }
 
