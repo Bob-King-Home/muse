@@ -1,14 +1,15 @@
 import SwiftUI
 
-/// v3.16：测速页（全球网测风格）——多节点 + 推荐最快 + 失败自动换节点。
+/// v3.17：测速页（全球网测风格）——多节点 + 推荐最快 + 失败自动换节点。
 /// 流程：Ping → 下载 → 上传；结果：下载 / 上传 / Ping 时延 / 抖动 / 公网 IP / 运营商 / 测速服务器。
 /// 只在前台跑；不弹窗（用户 2026-11-11：不要蜂窝提示弹窗，直接点开始就测）。
-/// 界面：顶部节点选择（Cloudflare / Cachefly，带延迟和“推荐”标记，选了就记住）
+/// 界面：顶部节点选择（Cloudflare / Cachefly / 腾讯 CDN / 阿里 CDN，2 列网格，
+/// 带延迟和“推荐”标记，选了就记住）
 /// + 中央表盘（全球网测同款圆弧表盘：底圈 + 青色进度弧 + 中央大数字；不用刻度 ForEach，
 /// 刻度几何曾让编译器超时）+ 阶段进度 + 结果卡片。
 /// 表盘满格按 1000 Mbps 算，超过就顶满；中央数字测速中是实时速率，完成后是下载结果。
 /// 完整性：单项失败不判整场失败（Ping/下载/上传哪项没测到，那行显示“—”，
-/// 其余结果照常出）；下载失败自动换另一个节点再试；三项全失败才算失败。
+/// 其余结果照常出）；下载失败自动按顺序换其他节点再试；三项全失败才算失败。
 struct SpeedTestView: View {
     @StateObject private var tester = SpeedTestEngine()
 
@@ -38,7 +39,7 @@ struct SpeedTestView: View {
                         .foregroundStyle(SpeedAppearance.color(hex: Self.accentHex))
                         .disabled(tester.isRunning || tester.measuringNodes)
                     }
-                    HStack(spacing: 10) {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                         ForEach(SpeedTestNode.all) { n in
                             nodeButton(n)
                         }
@@ -121,7 +122,7 @@ struct SpeedTestView: View {
                         .padding(.top, 8)
                 }
 
-                Text("测速会消耗流量（下载/上传几十 MB），只在前台进行；延迟为连接时间近似值，不是 ICMP Ping。下载失败会自动换另一个节点再试。")
+                Text("测速会消耗流量（下载/上传几十 MB），只在前台进行；延迟为连接时间近似值，不是 ICMP Ping。下载失败会自动换其他节点再试。")
                     .font(.caption2).foregroundStyle(.white.opacity(0.85))
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, alignment: .center)
