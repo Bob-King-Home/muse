@@ -21,9 +21,11 @@ struct SpeedIslandLiveActivity: Widget {
                 }
                 .foregroundStyle(fontColor)
                 HStack(spacing: 16) {
-                    Label("↓ \(context.state.downText)", systemImage: "arrow.down")
+                    // v3.5：这里不能用 Label（系统图标箭头）——文字里已经有 ↓↑，
+                    // 用 Label 会画两个箭头（"↓ ↓ 0 B/s"），就是锁屏上看到的重复箭头
+                    Text("↓ \(context.state.downText)")
                         .animation(nil, value: context.state.downText)
-                    Label("↑ \(context.state.upText)", systemImage: "arrow.up")
+                    Text("↑ \(context.state.upText)")
                         .animation(nil, value: context.state.upText)
                 }
                 .font(.system(size: lockSize, design: .monospaced))

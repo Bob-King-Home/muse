@@ -1,6 +1,20 @@
 import SwiftUI
 import UIKit
 import UserNotifications
+import BackgroundTasks
+
+/// v3.5：后台刷新看门狗。系统定时把 App 拉起来采一次网速推给灵动岛——
+/// App 万一被全屏游戏等挤掉（系统为省内存杀后台），不用等用户手动打开也能自己恢复。
+/// 注意：用户手动划掉 App 后系统不会再拉起，直到下次手动打开，这是 iOS 的规矩。
+enum BackgroundWatchdog {
+    static let taskID = "com.speedisland.app.refresh"
+
+    static func schedule() {
+        let request = BGAppRefreshTaskRequest(identifier: taskID)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        try? BGTaskScheduler.shared.submit(request)
+    }
+}
 
 @main
 struct SpeedIslandApp: App {
@@ -29,7 +43,40 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
         application.setMinimumBackgroundFetchInterval(UIApplication.backgroundFetchIntervalMinimum)
+        // v3.5：注册后台刷新看门狗任务
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: BackgroundWatchdog.taskID, using: nil) { task in
+            self.handleRefresh(task: task as! BGAppRefreshTask)
+        }
+        BackgroundWatchdog.schedule()
         return true
+    }
+
+    /// 看门狗到点：先约下一次，再采一次网速推给灵动岛。没有活着的 Activity
+    /// （用户点了停止）就直接收尾，不采样。
+    private func handleRefresh(task: BGAppRefreshTask) {
+        BackgroundWatchdog.schedule()
+        let work = Task { @MainActor in
+            guard LiveActivityManager.shared.isActive else {
+                task.setTaskCompleted(success: true)
+                return
+            }
+            let sampler = NetworkSpeedSampler()
+            _ = sampler.sample()
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            let s = sampler.sample()
+            LiveActivityManager.shared.ensureActive(
+                downText: NetworkSpeedSampler.format(s.downSmoothed),
+                upText: NetworkSpeedSampler.format(s.upSmoothed),
+                down: s.downSmoothed,
+                up: s.upSmoothed,
+                isWiFi: s.isWiFi,
+                ip: NetworkInfo.currentIP(isWiFi: s.isWiFi),
+                netType: NetworkInfo.radioAccess(isWiFi: s.isWiFi),
+                carrier: NetworkInfo.carrierName()
+            )
+            task.setTaskCompleted(success: true)
+        }
+        task.expirationHandler = { work.cancel() }
     }
 
     func application(

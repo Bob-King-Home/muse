@@ -60,6 +60,9 @@ final class SpeedEngine: ObservableObject {
         tickCount = 0
         ssid = ""; ip = ""; netType = "Wi-Fi"; carrier = ""
         startTimerOnly()
+        // v3.5：约好后台刷新看门狗（系统定时把 App 拉起来推一次灵动岛），
+        // 这样 App 万一被游戏等挤掉，也能自己恢复，不用等用户手动打开
+        BackgroundWatchdog.schedule()
         // v3.3：定位保活和采样一起开（前台点开始，系统允许后台继续定位）
         keepAlive.start()
         // 只注册一次，token 保存好，stop() 时按 token 删
@@ -179,6 +182,16 @@ final class SpeedEngine: ObservableObject {
         downBytesPerSec = 0
         ssid = ""; ip = ""; netType = "Wi-Fi"; carrier = ""
         lastDownText = ""; lastUpText = ""; lastPush = .distantPast
+    }
+
+    /// v3.5：从后台/全屏游戏切回来时恢复。App 可能在后台被挂起甚至被系统杀掉过，
+    /// 回到前台就重建定时器、重开定位保活、立即采一次推给灵动岛。
+    /// 注意：定时器和定位重开都是幂等的，重复调没事。
+    @MainActor
+    func resumeAfterBackground() {
+        guard isRunning else { return }
+        startTimerOnly()
+        keepAlive.start()
     }
 
     /// App 打开时调用：上次是开着的状态，就自动续开，实现“不关就一直都在”

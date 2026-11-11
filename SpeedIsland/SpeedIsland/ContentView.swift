@@ -9,6 +9,7 @@ struct ContentView: View {
     @StateObject private var engine = SpeedEngine()
     @ObservedObject private var manager = LiveActivityManager.shared
     @ObservedObject private var keepAlive = LocationKeepAlive.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     @AppStorage(SpeedAppearance.fontColorKey) private var fontColorHex = SpeedAppearance.defaultFontColor
     @AppStorage(SpeedAppearance.fontSizeKey) private var fontSizeLevel = SpeedAppearance.defaultFontSize
@@ -117,6 +118,10 @@ struct ContentView: View {
             }
         }
         .onAppear { engine.restoreIfNeeded() }
+        .onChange(of: scenePhase) { _, newPhase in
+            // v3.5：从全屏游戏/后台切回来，立即恢复定时器和定位保活，灵动岛马上续上
+            if newPhase == .active { engine.resumeAfterBackground() }
+        }
         .sheet(isPresented: $showAppearance) {
             AppearanceSheetView(fontColorHex: $fontColorHex, fontSizeLevel: $fontSizeLevel, backgroundHex: $backgroundHex) {
                 engine.refreshAppearance()
