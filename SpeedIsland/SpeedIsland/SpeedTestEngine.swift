@@ -1,8 +1,8 @@
 import Foundation
 import Network
 
-/// v3.16：测速模块（全球网测风格）——多节点 + 推荐最快 + 失败自动换节点。
-/// 节点（SpeedTestNode）：Cloudflare / Cachefly，都是 HTTPS 直连。
+/// v3.17：测速模块（全球网测风格）——多节点 + 推荐最快 + 失败自动换节点。
+/// 节点（SpeedTestNode）：Cloudflare / Cachefly / 腾讯 CDN / 阿里 CDN，都是 HTTPS 直连。
 /// 中科大已去掉（用户 2026-11-11：没必要中科大；它在公司网下预检就连不上）。
 /// 流程：Ping → 下载 → 上传；结果：下载 / 上传 / Ping 时延 / 抖动 / 公网 IP / 运营商 / 测速服务器。
 /// 只在前台跑；不弹窗（用户 2026-11-11：不要蜂窝提示弹窗，直接开始测）。
@@ -10,7 +10,7 @@ import Network
 ///
 /// 完整性（用户 2026-11-11：不要半成品，问题和可能出现的结果要想清楚并处理掉）：
 /// - 延迟测不到：不判整场失败，Ping 显示“—”，继续测下载/上传。
-/// - 下载失败：自动换另一个节点再试一次；两个都失败才判下载失败，
+/// - 下载失败：自动按顺序换其他节点再试（4 个节点挨个试）；都失败才判下载失败，
 ///   但整场不失败 —— Ping 和上传的结果照常出，不让用户白等一场。
 /// - 上传失败：同理，下载和 Ping 的结果照常出。
 /// - 只有 Ping、下载、上传三项全失败，才算整场失败。
@@ -19,7 +19,7 @@ import Network
 ///
 /// 下载/上传用 10 秒取样（不是下完整个文件）：够测出稳定速度，又不会拖太久；
 /// 够 1MB 且满 2 秒才算有效，否则算该项失败。
-/// 上传两个节点都走 Cloudflare 的 __up（Cachefly 没有公开上传端点；
+/// 上传所有节点都走 Cloudflare 的 __up（Cachefly / 腾讯 / 阿里都没有公开上传端点；
 /// 上传只是往服务器发数据、测发送速率，用谁的端点不影响结果）。
 final class SpeedTestEngine: NSObject, ObservableObject, URLSessionDataDelegate {
     enum Phase: String {
@@ -33,7 +33,7 @@ final class SpeedTestEngine: NSObject, ObservableObject, URLSessionDataDelegate 
 
     static let nodeKey = "si_speedtest_node"
 
-    /// 测速节点（Cloudflare / Cachefly），选了就记住，下次还用这个。
+    /// 测速节点（Cloudflare / Cachefly / 腾讯 CDN / 阿里 CDN），选了就记住，下次还用这个。
     @Published var node: SpeedTestNode {
         didSet {
             UserDefaults.standard.set(node.id, forKey: Self.nodeKey)
@@ -186,7 +186,7 @@ final class SpeedTestEngine: NSObject, ObservableObject, URLSessionDataDelegate 
     private func finish() {
         let allFailed = pingAvgMs == nil && downloadMbps == nil && uploadMbps == nil
         if allFailed {
-            errorMessage = "测速失败：三个节点都连不上，换个网络再试试"
+            errorMessage = "测速失败：所有节点都连不上，换个网络再试试"
             phase = .failed
             statusText = "测速失败"
         } else {
@@ -239,22 +239,30 @@ final class SpeedTestEngine: NSObject, ObservableObject, URLSessionDataDelegate 
             }
         }
 
-        // 2) Download：先测选中的节点，失败自动换另一个节点再试
+        // 2) Download：先测选中的节点，失败按顺序换其他节点挨个再试
         await MainActor.run { phase = .download; statusText = "正在测下载速度…" }
         var dl: Double? = await measureDownload(node: node)
+        var usedFallback: SpeedTestNode?
         if dl == nil && !cancelled {
-            let fallback = SpeedTestNode.all.first { $0.id != node.id }
-            if let fallback {
+            for fallback in SpeedTestNode.all where fallback.id != node.id {
+                if cancelled { break }
                 await MainActor.run { statusText = "当前节点下载失败，换 \(fallback.name) 再试…" }
                 dl = await measureDownload(node: fallback)
                 if dl != nil {
-                    await MainActor.run { serverName = "\(node.name) → \(fallback.name)" }
+                    usedFallback = fallback
+                    break
                 }
             }
         }
         guard !cancelled else { return }
         if let dl {
-            await MainActor.run { downloadMbps = dl; progress = 0.6 }
+            await MainActor.run {
+                downloadMbps = dl
+                progress = 0.6
+                if let usedFallback {
+                    serverName = "\(node.name) → \(usedFallback.name)"
+                }
+            }
         }
 
         // 3) Upload：走 Cloudflare 的 __up（Cachefly 没有上传端点）
