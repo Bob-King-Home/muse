@@ -1,0 +1,46 @@
+# XcodeGen 配置：Mac 上装了 XcodeGen 后，跑 `xcodegen` 就能生成 .xcodeproj
+# 比手写 project.pbxproj 更可靠。如果直接用下面给的 project.pbxproj 打不开，就用这个。
+# 安装：brew install xcodegen
+name: SpeedIsland
+options:
+  bundleIdPrefix: com.speedisland
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  SpeedIsland:
+    type: application
+    platform: iOS
+    sources:
+      - path: SpeedIsland
+        excludes:
+          - Info.plist
+    info:
+      path: SpeedIsland/Info.plist
+      properties:
+        CFBundleDisplayName: SpeedIsland
+        UILaunchStoryboardName: ""
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.speedisland.app
+        INFOPLIST_FILE: SpeedIsland/Info.plist
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+    dependencies:
+      - target: SpeedIslandWidget
+        embed: true
+  SpeedIslandWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: SpeedIslandWidget
+        excludes:
+          - Info.plist
+      # SpeedActivityAttributes.swift 必须同时进两个 target
+      - path: SpeedIsland/SpeedActivityAttributes.swift
+    info:
+      path: SpeedIslandWidget/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.speedisland.app.widget
+        INFOPLIST_FILE: SpeedIslandWidget/Info.plist
+        SWIFT_VERSION: "5.0"

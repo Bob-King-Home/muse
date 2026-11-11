@@ -1,0 +1,148 @@
+import ActivityKit
+import Foundation
+
+/// v2.2 Live Activity 管理
+/// 修 P1-2：startTask 和 updateTask 分开，不再互相取消；start 用 await 串行化。
+/// 修 P1-1：不再宣传“灵动岛 1 秒”。前台 App 内约 1 秒；灵动岛已开频繁刷新
+/// （Info.plist 有 NSSupportsLiveActivitiesFrequentUpdates），正常情况下约 1 秒一跳，
+/// 系统繁忙、低电量时可能放慢。FrequentUpdates 提高预算，不能取消预算。
+/// 闲时每 4 秒推一次心跳保鲜。
+/// 修 P1-7：失败不再只 print，写进 errorMessage 让界面能提示用户去设置里开。
+@MainActor
+final class LiveActivityManager: ObservableObject {
+    static let shared = LiveActivityManager()
+    @Published private(set) var isActive = false
+    @Published var errorMessage: String?
+
+    private var activity: Activity<SpeedActivityAttributes>?
+    private var lastDownText = ""
+    private var lastUpText = ""
+    private var lastPush = Date.distantPast
+    private var startTask: Task<Void, Never>?
+    private var updateTask: Task<Void, Never>?
+    // v2.5：记上次推的外观，改了颜色/字号/底色就算“变了”，也要推一次，
+    // 不然只改外观不改网速时 update() 的 changed 判断会直接 return。
+    private var lastFontColorHex = ""
+    private var lastFontSizeLevel = -1
+    private var lastBackgroundHex = ""
+
+    /// v2.5：从 UserDefaults 读当前外观，打包进 ContentState 推给 Widget。
+    private func currentState(downText: String, upText: String, isWiFi: Bool) -> SpeedActivityAttributes.ContentState {
+        SpeedActivityAttributes.ContentState(
+            downText: downText,
+            upText: upText,
+            isWiFi: isWiFi,
+            fontColorHex: SpeedAppearance.fontColorHex,
+            fontSizeLevel: SpeedAppearance.fontSizeLevel,
+            backgroundHex: SpeedAppearance.backgroundHex
+        )
+    }
+
+    private func appearanceChanged() -> Bool {
+        SpeedAppearance.fontColorHex != lastFontColorHex
+            || SpeedAppearance.fontSizeLevel != lastFontSizeLevel
+            || SpeedAppearance.backgroundHex != lastBackgroundHex
+    }
+
+    private func rememberAppearance() {
+        lastFontColorHex = SpeedAppearance.fontColorHex
+        lastFontSizeLevel = SpeedAppearance.fontSizeLevel
+        lastBackgroundHex = SpeedAppearance.backgroundHex
+    }
+
+    var frequentUpdatesEnabled: Bool {
+        ActivityAuthorizationInfo().frequentPushesEnabled
+    }
+
+    func start(downText: String, upText: String, down: Double, up: Double, isWiFi: Bool) {
+        let info = ActivityAuthorizationInfo()
+        guard info.areActivitiesEnabled else {
+            errorMessage = "实时活动被关了：去设置 > SpeedIsland > 实时活动打开"
+            return
+        }
+        if !info.frequentPushesEnabled {
+            errorMessage = "已开灵动岛，但系统限制了频繁刷新，灵动岛约 5-15 秒一跳（前台 App 内仍约 1 秒）"
+        }
+        if let existing = Activity<SpeedActivityAttributes>.activities.first {
+            activity = existing
+            isActive = true
+            update(downText: downText, upText: upText, down: down, up: up, isWiFi: isWiFi)
+            return
+        }
+        startTask?.cancel()
+        startTask = Task {
+            // 串行：先等旧的结束完，再 request，不再异步竞态
+            if let old = activity { await old.end(nil, dismissalPolicy: .immediate) }
+            let attrs = SpeedActivityAttributes()
+            let state = currentState(downText: downText, upText: upText, isWiFi: isWiFi)
+            do {
+                activity = try Activity.request(attributes: attrs, content: .init(state: state, staleDate: Date().addingTimeInterval(10)))
+                lastDownText = downText; lastUpText = upText; lastPush = Date()
+                rememberAppearance()
+                isActive = true
+                errorMessage = nil
+            } catch {
+                errorMessage = "灵动岛启动失败：\(error.localizedDescription)"
+            }
+        }
+    }
+
+    func update(downText: String, upText: String, down: Double, up: Double, isWiFi: Bool) {
+        guard let activity else { return }
+        let now = Date()
+        let changed = downText != lastDownText || upText != lastUpText || appearanceChanged()
+        let overdue = now.timeIntervalSince(lastPush) >= 4.0
+        guard changed || overdue else { return }
+        lastDownText = downText; lastUpText = upText; lastPush = now
+        rememberAppearance()
+        updateTask?.cancel()
+        updateTask = Task {
+            let state = currentState(downText: downText, upText: upText, isWiFi: isWiFi)
+            await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(10)))
+        }
+    }
+
+    /// v2.6：8 小时到期自动续真的修了。原来 tick() 只看 manager.isActive，但系统
+    /// 8 小时后结束 Activity 时不会通知 App，isActive 一直是 true，tick() 就一直调
+    /// update()（对已结束的 Activity 无效），Activity 死透了也永远不重建，README
+    /// “8 小时到期自动续”是假话。现在每次 tick 都查一次系统里还活着的 Activity：
+    /// 有就 update，没有就 start() 重建。
+    /// 注意：灵动岛被用户手动划掉也会重建（App 还在跑就认为还要显示），要彻底关掉
+    /// 点 App 里的“停止”。
+    func ensureActive(downText: String, upText: String, down: Double, up: Double, isWiFi: Bool) {
+        if let live = Activity<SpeedActivityAttributes>.activities.first {
+            activity = live
+            isActive = true
+            update(downText: downText, upText: upText, down: down, up: up, isWiFi: isWiFi)
+        } else {
+            activity = nil
+            isActive = false
+            start(downText: downText, upText: upText, down: down, up: up, isWiFi: isWiFi)
+        }
+    }
+
+    /// v2.5：用户在 App 里改了颜色/字号/底色，立即把当前网速 + 新外观推给灵动岛 / 锁屏，
+    /// 不用等下一秒 tick，也不用重装。
+    func refreshAppearance(downText: String, upText: String, isWiFi: Bool) {
+        guard let activity else { return }
+        lastPush = Date()
+        rememberAppearance()
+        updateTask?.cancel()
+        updateTask = Task {
+            let state = currentState(downText: downText, upText: upText, isWiFi: isWiFi)
+            await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(10)))
+        }
+    }
+
+    func end() async {
+        startTask?.cancel()
+        updateTask?.cancel()
+        if let activity { await activity.end(nil, dismissalPolicy: .immediate) }
+        self.activity = nil
+        isActive = false
+        lastDownText = ""; lastUpText = ""
+        lastFontColorHex = ""; lastFontSizeLevel = -1; lastBackgroundHex = ""
+    }
+
+    func stop() { Task { await end() } }
+}

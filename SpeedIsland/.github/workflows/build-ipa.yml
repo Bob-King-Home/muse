@@ -1,0 +1,46 @@
+# 在 GitHub 云端免费编译 SpeedIsland，生成未签名的 .ipa
+# 不用 Mac、不用装 Xcode。编译出来是未签名的包，再用 AltStore / SideStore /
+# ESign / Scarlet 在手机上签名安装（免费 Apple ID，7 天过期要重签）。
+# 具体步骤见 BUILD_IPA.md。
+name: Build unsigned IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build app (unsigned)
+        run: |
+          xcodebuild -project SpeedIsland.xcodeproj \
+            -target SpeedIsland \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Verify widget is embedded
+        run: |
+          ls -la build/Build/Products/Release-iphoneos/SpeedIsland.app/PlugIns/
+
+      - name: Package IPA
+        run: |
+          APP_PATH="build/Build/Products/Release-iphoneos/SpeedIsland.app"
+          mkdir -p Payload
+          cp -r "$APP_PATH" Payload/
+          zip -r SpeedIsland-unsigned.ipa Payload
+          ls -lh SpeedIsland-unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpeedIsland-unsigned-ipa
+          path: SpeedIsland-unsigned.ipa
+          retention-days: 30
