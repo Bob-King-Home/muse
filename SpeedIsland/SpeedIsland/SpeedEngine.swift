@@ -5,7 +5,7 @@ import UIKit
 /// 后台刷新改为 iOS 后台抓取（Background Fetch，系统定期唤醒 App 采一次网速推给
 /// 灵动岛，频率由系统决定）；前台打开 App 时仍是 1 秒定时器。
 /// 保留：Live Activity 8 小时到期自动重建；上次开着被杀掉/重启后，再打开 App 自动续开；
-/// 有流量 1 秒，闲时 4 秒心跳，低电量 5 秒；leeway 200ms。
+/// 有流量 1 秒，闲时 4 秒心跳，低电量 5 秒；leeway 0（严格 1 秒）。
 final class SpeedEngine: ObservableObject {
     @Published private(set) var downText = "0 B/s"
     @Published private(set) var upText = "0 B/s"
@@ -56,6 +56,11 @@ final class SpeedEngine: ObservableObject {
     private var lastCarrier = ""
     private var powerObserver: NSObjectProtocol?
     private static let wasRunningKey = "SpeedIsland.wasRunning"
+    /// v3.12：灵动岛开关 —— 用户可以在 App 里随时关/开灵动岛显示。
+    /// 关掉后 App 继续在后台采样，主界面照常每秒显示，只是不再推灵动岛；
+    /// 再打开时立即重建灵动岛。默认开。
+    private static let islandEnabledKey = "si_islandEnabled"
+    @Published var islandEnabled: Bool = UserDefaults.standard.object(forKey: islandEnabledKey) as? Bool ?? true
 
     var refreshInterval: TimeInterval {
         ProcessInfo.processInfo.isLowPowerModeEnabled ? 5.0 : 1.0
@@ -95,8 +100,9 @@ final class SpeedEngine: ObservableObject {
     private func startTimerOnly() {
         timer?.cancel()
         let t = DispatchSource.makeTimerSource(queue: queue)
-        // leeway 200ms：让系统合并唤醒，比 50ms 省电，1 秒级显示看不出差别
-        t.schedule(deadline: .now(), repeating: refreshInterval, leeway: .milliseconds(200))
+        // v3.12：leeway 改成 0（严格定时器）。之前 200ms 的 leeway 让系统在后台
+        // 合并/推迟唤醒，跑久了定时器越拖越晚，是岛越刷越慢的帮凶之一。
+        t.schedule(deadline: .now(), repeating: refreshInterval, leeway: .nanoseconds(0))
         t.setEventHandler { [weak self] in self?.tick() }
         t.resume()
         timer = t
@@ -177,9 +183,10 @@ final class SpeedEngine: ObservableObject {
             self.carrier = carrier
             if !s.isWiFi { self.ssid = "" }
             // v3.8：岛按 2 秒限速推（上面 pushIsland 决定），主界面数字每秒都刷新。
+            // v3.12：灵动岛开关关了就不推岛（App 继续跑，主界面照常显示）。
             // v2.6：8 小时到期自动续期。不要只看 manager.isActive（系统结束 Activity 时
             // 它不会变 false），ensureActive() 每次都查系统里还活着的 Activity，没有就重建。
-            if pushIsland {
+            if pushIsland && islandEnabled {
                 self.manager.ensureActive(downText: d, upText: u, down: s.downSmoothed, up: s.upSmoothed, isWiFi: s.isWiFi, ssid: self.ssid, ip: ip, netType: netType, carrier: carrier)
             }
         }
@@ -200,6 +207,21 @@ final class SpeedEngine: ObservableObject {
     func resetSessionStats() {
         totalDownBytes = 0; totalUpBytes = 0; peakDownRate = 0; peakUpRate = 0
         totalDown = 0; totalUp = 0; peakDown = 0; peakUp = 0
+    }
+
+    /// v3.12：灵动岛开关。关掉：立即结束 Live Activity，tick 不再推岛
+    /// （App 继续后台采样，主界面数字照常每秒刷新）；打开：马上重建岛。
+    @MainActor
+    func setIslandEnabled(_ enabled: Bool) {
+        islandEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: Self.islandEnabledKey)
+        if enabled {
+            if isRunning {
+                manager.ensureActive(downText: downText, upText: upText, down: 0, up: 0, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
+            }
+        } else {
+            manager.stop()
+        }
     }
 
     private func stopTimerOnly() {

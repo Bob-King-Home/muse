@@ -5,5 +5,6 @@ import WidgetKit
 struct SpeedIslandWidgetBundle: WidgetBundle {
     var body: some Widget {
         SpeedIslandLiveActivity()
+        SpeedIslandHomeWidget()
     }
 }

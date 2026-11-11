@@ -128,11 +128,24 @@ struct ContentView: View {
                     .buttonStyle(.plain)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(manager.isActive ? "运行中 · \(engine.intervalText)刷新" : "已停止")
+                        Text(engine.isRunning ? (engine.islandEnabled ? (manager.isActive ? "运行中 · \(engine.intervalText)刷新" : "运行中 · 灵动岛启动中") : "运行中 · 灵动岛已关") : "已停止")
                         Text(keepAlive.statusText)
                     }
                     .font(.caption).foregroundStyle(.secondary)
                     .padding(.top, 14)
+
+                    // v3.12：灵动岛开关 —— 关掉后 App 继续跑、主界面照常显示，只是不推灵动岛
+                    HStack {
+                        Text("灵动岛")
+                        Spacer()
+                        Toggle("", isOn: Binding(
+                            get: { engine.islandEnabled },
+                            set: { engine.setIslandEnabled($0) }
+                        ))
+                        .labelsHidden()
+                    }
+                    .font(.caption).foregroundStyle(.secondary)
+                    .padding(.top, 10)
 
                     if let err = engine.errorMessage ?? manager.errorMessage {
                         Text(err)
@@ -142,7 +155,7 @@ struct ContentView: View {
                             .padding(.top, 8)
                     }
 
-                    Text("开始后定位保活让 App 在后台持续运行，灵动岛每秒刷新；状态栏会显示定位箭头。点停止后保活结束，箭头消失。")
+                    Text("开始后定位保活让 App 在后台持续运行；状态栏会显示定位箭头。点停止后保活结束，箭头消失。灵动岛开关随时可以关掉岛，App 内照常每秒显示。")
                         .font(.caption2).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity, alignment: .center)
