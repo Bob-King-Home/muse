@@ -1,5 +1,6 @@
 import ActivityKit
 import Foundation
+import WidgetKit
 
 /// v2.2 Live Activity 管理
 /// 修 P1-2：startTask 和 updateTask 分开，不再互相取消；start 用 await 串行化。
@@ -106,6 +107,10 @@ final class LiveActivityManager: ObservableObject {
                 rememberNetInfo(ssid: ssid, ip: ip, netType: netType, carrier: carrier)
                 isActive = true
                 errorMessage = nil
+                // v3.14：岛刚开，主屏幕小组件也要马上跟上（不然它还停在“未开始”，
+                // 要等系统 15 分钟才刷新）。reloadAllTimelines 只是“请系统刷新”，
+                // 系统仍会限流，但开/关岛这种低频操作不会把预算耗光。
+                WidgetCenter.shared.reloadAllTimelines()
             } catch {
                 errorMessage = "灵动岛启动失败：\(error.localizedDescription)"
             }
@@ -161,6 +166,33 @@ final class LiveActivityManager: ObservableObject {
         }
     }
 
+    /// v3.14：重建 Live Activity（重置系统限流预算）。结束旧的，等它结束完再开新的，
+    /// 串行，不竞态。岛会闪一下（消失再出现），然后恢复 2 秒一跳。
+    /// 调用方（Engine 每 5 分钟调一次）需传入当前速度与网络信息。
+    func restart(downText: String, upText: String, isWiFi: Bool, ssid: String = "", ip: String = "", netType: String = "Wi-Fi", carrier: String = "") {
+        guard activity != nil else { return }
+        startTask?.cancel()
+        updateTask?.cancel()
+        startTask = Task {
+            if let old = activity { await old.end(nil, dismissalPolicy: .immediate) }
+            activity = nil
+            isActive = false
+            sessionStart = Date()
+            let attrs = SpeedActivityAttributes()
+            let state = currentState(downText: downText, upText: upText, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
+            do {
+                activity = try Activity.request(attributes: attrs, content: .init(state: state, staleDate: Date().addingTimeInterval(10)))
+                lastDownText = downText; lastUpText = upText; lastPush = Date()
+                rememberAppearance()
+                rememberNetInfo(ssid: ssid, ip: ip, netType: netType, carrier: carrier)
+                isActive = true
+                errorMessage = nil
+            } catch {
+                errorMessage = "灵动岛重建失败：\(error.localizedDescription)"
+            }
+        }
+    }
+
     func end() async {
         startTask?.cancel()
         updateTask?.cancel()
@@ -170,6 +202,8 @@ final class LiveActivityManager: ObservableObject {
         lastDownText = ""; lastUpText = ""
         lastFontColorHex = ""; lastFontSizeLevel = -1; lastBackgroundHex = ""
         lastSsid = ""; lastIp = ""; lastNetType = ""; lastCarrier = ""
+        // v3.14：岛关了，小组件也马上跟上（变回“未开始”），不用等 15 分钟
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     func stop() { Task { await end() } }

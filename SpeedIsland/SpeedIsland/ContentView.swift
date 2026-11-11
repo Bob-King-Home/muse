@@ -155,7 +155,7 @@ struct ContentView: View {
                             .padding(.top, 8)
                     }
 
-                    Text("开始后定位保活让 App 在后台持续运行；状态栏会显示定位箭头。点停止后保活结束，箭头消失。灵动岛开关随时可以关掉岛，App 内照常每秒显示。")
+                    Text("开始后定位保活让 App 在后台持续运行；状态栏会显示定位箭头。点停止后保活结束，箭头消失。关掉灵动岛开关会同时停掉定位保活，岛上什么都不留；再打开就一起恢复。")
                         .font(.caption2).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity, alignment: .center)

@@ -61,6 +61,9 @@ final class SpeedEngine: ObservableObject {
     /// 再打开时立即重建灵动岛。默认开。
     private static let islandEnabledKey = "si_islandEnabled"
     @Published var islandEnabled: Bool = UserDefaults.standard.object(forKey: islandEnabledKey) as? Bool ?? true
+    /// v3.14：上次重建 Live Activity 的时间（5 分钟重建一次，重置系统限流预算）。
+    /// 只在主线程碰（start() 与 tick 的 main-async 块），不跨队列。
+    private var lastRestart = Date()
 
     var refreshInterval: TimeInterval {
         ProcessInfo.processInfo.isLowPowerModeEnabled ? 5.0 : 1.0
@@ -85,6 +88,8 @@ final class SpeedEngine: ObservableObject {
         BackgroundWatchdog.schedule()
         // v3.3：定位保活和采样一起开（前台点开始，系统允许后台继续定位）
         keepAlive.start()
+        // v3.14：重建计时从这次开始算
+        lastRestart = Date()
         // 只注册一次，token 保存好，stop() 时按 token 删
         if powerObserver == nil {
             powerObserver = NotificationCenter.default.addObserver(
@@ -184,10 +189,17 @@ final class SpeedEngine: ObservableObject {
             if !s.isWiFi { self.ssid = "" }
             // v3.8：岛按 2 秒限速推（上面 pushIsland 决定），主界面数字每秒都刷新。
             // v3.12：灵动岛开关关了就不推岛（App 继续跑，主界面照常显示）。
+            // v3.14：满 5 分钟重建一次 Live Activity，重置系统限流预算，岛恢复 2 秒一跳。
+            // 岛会闪一下（消失再出现）。只在岛开着时做；重建那一下跳过 ensureActive。
             // v2.6：8 小时到期自动续期。不要只看 manager.isActive（系统结束 Activity 时
             // 它不会变 false），ensureActive() 每次都查系统里还活着的 Activity，没有就重建。
             if pushIsland && islandEnabled {
-                self.manager.ensureActive(downText: d, upText: u, down: s.downSmoothed, up: s.upSmoothed, isWiFi: s.isWiFi, ssid: self.ssid, ip: ip, netType: netType, carrier: carrier)
+                if Date().timeIntervalSince(lastRestart) >= 300 {
+                    lastRestart = Date()
+                    self.manager.restart(downText: d, upText: u, isWiFi: s.isWiFi, ssid: self.ssid, ip: ip, netType: netType, carrier: carrier)
+                } else {
+                    self.manager.ensureActive(downText: d, upText: u, down: s.downSmoothed, up: s.upSmoothed, isWiFi: s.isWiFi, ssid: self.ssid, ip: ip, netType: netType, carrier: carrier)
+                }
             }
         }
     }
@@ -211,15 +223,23 @@ final class SpeedEngine: ObservableObject {
 
     /// v3.12：灵动岛开关。关掉：立即结束 Live Activity，tick 不再推岛
     /// （App 继续后台采样，主界面数字照常每秒刷新）；打开：马上重建岛。
+    /// v3.14：关岛时同时停定位保活 —— 蓝箭头是定位保活带来的，showsBackgroundLocationIndicator
+    /// 在用户这版 iOS 上藏不住；不停定位，岛上就一直有个蓝箭头占地方。
+    /// 关岛 = 岛上什么都不留（不推速度、也不定位）；再打开时定位与岛一起恢复。
+    /// 注意：关岛后 App 不再后台运行（前台打开照常用）。
     @MainActor
     func setIslandEnabled(_ enabled: Bool) {
         islandEnabled = enabled
         UserDefaults.standard.set(enabled, forKey: Self.islandEnabledKey)
         if enabled {
             if isRunning {
+                keepAlive.start()
                 manager.ensureActive(downText: downText, upText: upText, down: 0, up: 0, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
             }
         } else {
+            if isRunning {
+                keepAlive.stop()
+            }
             manager.stop()
         }
     }

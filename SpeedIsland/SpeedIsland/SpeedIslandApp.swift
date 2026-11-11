@@ -27,7 +27,14 @@ struct SpeedIslandApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            // v3.14：底部两个 Tab（全球网测风格）——监测（实时网速仪表盘）与测速（主动测速）
+            TabView {
+                ContentView()
+                    .tabItem { Label("监测", systemImage: "gauge.with.dots.needle.bottom.50percent") }
+                SpeedTestView()
+                    .tabItem { Label("测速", systemImage: "speedometer") }
+            }
+            .tint(SpeedAppearance.color(hex: "#6FD8F0"))
         }
     }
 }
