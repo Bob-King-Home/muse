@@ -53,7 +53,7 @@ final class PiPManager: NSObject, AVPictureInPictureSampleBufferPlaybackDelegate
         displayLayer = layer
 
         var timebase: CMTimebase?
-        CMTimebaseCreateWithMasterClock(CFAllocatorGetDefault(), CMClockGetHostTimeClock(), &timebase)
+        CMTimebaseCreateWithMasterClock(allocator: nil, masterClock: CMClockGetHostTimeClock(), timebaseOut: &timebase)
         if let tb = timebase {
             layer.controlTimebase = tb
             CMTimebaseSetTime(tb, time: .zero)
