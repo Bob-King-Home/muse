@@ -17,7 +17,7 @@ enum SpeedTestNodeKind: String {
     case librespeed
 }
 
-struct SpeedTestNode: Identifiable, Equatable {
+struct SpeedTestNode: Identifiable, Equatable, Hashable {
     let id: String
     let name: String
     let location: String
@@ -64,7 +64,8 @@ enum USTCPow {
         var nonce = 0
         while nonce < maxNonce {
             let payload = Data((challenge + String(nonce)).utf8)
-            let digest = SHA256.hash(data: payload)
+            // SHA256Digest 不支持下标，先转 Data 再按字节比
+            let digest = Data(SHA256.hash(data: payload))
             var ok = true
             for i in 0..<fullBytes where digest[i] != 0 {
                 ok = false
