@@ -1,6 +1,5 @@
 import ActivityKit
 import Foundation
-import WidgetKit
 
 /// v2.2 Live Activity 管理
 /// 修 P1-2：startTask 和 updateTask 分开，不再互相取消；start 用 await 串行化。
@@ -90,16 +89,15 @@ final class LiveActivityManager: ObservableObject {
             activity = existing
             isActive = true
             update(downText: downText, upText: upText, down: down, up: up, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
-            // v3.15：岛本来就开着（比如上个版本留下的），也要告诉小组件刷新，
-            // 不然小组件一直停在“未开始”。v3.14 只在新建 Activity 时调了一次，
-            // 这个分支直接 return，漏了。
-            WidgetCenter.shared.reloadAllTimelines()
             return
         }
         startTask?.cancel()
         startTask = Task {
-            // 串行：先等旧的结束完，再 request，不再异步竞态
-            if let old = activity { await old.end(nil, dismissalPolicy: .immediate) }
+            // v3.16：先开新岛，成功了再结束旧岛 —— 这样新岛 request 万一在后台失败，
+            // 旧岛还在（岛上继续显示旧速度），下一秒 tick 会再试；不会像之前那样
+            // 旧岛已结束、新岛又开失败，岛直接空掉，非要点开 App 才恢复。
+            // （旧岛的 end 在后台跑，不等它，岛的空档只有一瞬间。）
+            let old = activity
             let attrs = SpeedActivityAttributes()
             // v3.13：新开一个 Activity 就是一次新的测速，计时从现在开始
             sessionStart = Date()
@@ -111,17 +109,7 @@ final class LiveActivityManager: ObservableObject {
                 rememberNetInfo(ssid: ssid, ip: ip, netType: netType, carrier: carrier)
                 isActive = true
                 errorMessage = nil
-                // v3.14：岛刚开，主屏幕小组件也要马上跟上（不然它还停在“未开始”，
-                // 要等系统 15 分钟才刷新）。reloadAllTimelines 只是“请系统刷新”，
-                // 系统仍会限流，但开/关岛这种低频操作不会把预算耗光。
-                WidgetCenter.shared.reloadAllTimelines()
-                // v3.15：再补一次（3 秒后）。Activity.request 刚回来时，
-                // 小组件进程可能还没看到新 Activity，立刻 reload 会读到空，
-                // 于是继续显示“未开始”。3 秒后 Activity 肯定已注册，再请系统刷一次。
-                Task {
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    WidgetCenter.shared.reloadAllTimelines()
-                }
+                if let old { Task { await old.end(nil, dismissalPolicy: .immediate) } }
             } catch {
                 errorMessage = "灵动岛启动失败：\(error.localizedDescription)"
             }
@@ -177,33 +165,41 @@ final class LiveActivityManager: ObservableObject {
         }
     }
 
-    /// v3.14：重建 Live Activity（重置系统限流预算）。结束旧的，等它结束完再开新的，
-    /// 串行，不竞态。岛会闪一下（消失再出现），然后恢复 2 秒一跳。
+    /// v3.14：重建 Live Activity（重置系统限流预算）。
+    /// v3.16：重建加速 + 后台失败不丢岛 —— 先开新岛，成功了再结束旧岛。
+    /// 新岛 request 在后台失败时旧岛还在（岛上继续显示旧速度），下一秒 tick 会再试；
+    /// 不会像 v3.15 那样旧岛先结束、新岛又开失败，岛直接空掉，非要点开 App 才恢复。
     /// 调用方（Engine 每 5 分钟调一次）需传入当前速度与网络信息。
     func restart(downText: String, upText: String, isWiFi: Bool, ssid: String = "", ip: String = "", netType: String = "Wi-Fi", carrier: String = "") {
         guard activity != nil else { return }
         startTask?.cancel()
         updateTask?.cancel()
         startTask = Task {
-            if let old = activity { await old.end(nil, dismissalPolicy: .immediate) }
-            activity = nil
-            isActive = false
+            let old = activity
             sessionStart = Date()
             let attrs = SpeedActivityAttributes()
             let state = currentState(downText: downText, upText: upText, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
-            do {
-                activity = try Activity.request(attributes: attrs, content: .init(state: state, staleDate: Date().addingTimeInterval(10)))
-                lastDownText = downText; lastUpText = upText; lastPush = Date()
-                rememberAppearance()
-                rememberNetInfo(ssid: ssid, ip: ip, netType: netType, carrier: carrier)
-                isActive = true
-                errorMessage = nil
-                // v3.15：5 分钟重建也换了新 Activity，小组件也要跟上（之前漏了，
-                // 重建后小组件一直拿旧时间线，速度停在重建前那一刻）。
-                WidgetCenter.shared.reloadAllTimelines()
-            } catch {
-                errorMessage = "灵动岛重建失败：\(error.localizedDescription)"
+            // 后台 request 偶尔会失败一次（系统忙），失败就 2 秒后再试一次；
+            // 两次都失败也不丢岛（旧岛还在），下一秒 tick / 下次 5 分钟会再试。
+            for attempt in 0..<2 {
+                do {
+                    activity = try Activity.request(attributes: attrs, content: .init(state: state, staleDate: Date().addingTimeInterval(10)))
+                    lastDownText = downText; lastUpText = upText; lastPush = Date()
+                    rememberAppearance()
+                    rememberNetInfo(ssid: ssid, ip: ip, netType: netType, carrier: carrier)
+                    isActive = true
+                    errorMessage = nil
+                    if let old { Task { await old.end(nil, dismissalPolicy: .immediate) } }
+                    return
+                } catch {
+                    if attempt == 0 {
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    }
+                }
             }
+            // 两次都失败：旧岛还在，先不报错（下一秒 tick 会再试重建），
+            // 避免 App 里一直挂着“重建失败”。注意 activity 仍指向旧岛。
+            errorMessage = nil
         }
     }
 
@@ -216,8 +212,6 @@ final class LiveActivityManager: ObservableObject {
         lastDownText = ""; lastUpText = ""
         lastFontColorHex = ""; lastFontSizeLevel = -1; lastBackgroundHex = ""
         lastSsid = ""; lastIp = ""; lastNetType = ""; lastCarrier = ""
-        // v3.14：岛关了，小组件也马上跟上（变回“未开始”），不用等 15 分钟
-        WidgetCenter.shared.reloadAllTimelines()
     }
 
     func stop() { Task { await end() } }
