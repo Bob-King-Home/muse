@@ -195,6 +195,8 @@ private struct SpeedNumberText: View {
 
 /// 表盘：半圆仪表，刻度按对数排（0/5/10/20/50/100/200/500/1G/2G/5G，和市面测速 App 一样），
 /// 指针 + 青色进度弧显示当前下载速度，中间是大号加粗数字。
+/// 注意：刻度、弧线、指针各拆成小函数 / 小 View——整块写在一个 body 里编译器
+/// 类型推断会超时（"unable to type-check this expression in reasonable time"）。
 private struct SpeedDialView: View {
     var downBytesPerSec: Double
     var downText: String
@@ -211,6 +213,10 @@ private struct SpeedDialView: View {
         return min(log10(mbps + 1) / log10(maxMbps + 1), 1)
     }
     private func angle(fraction f: Double) -> Double { 180 - f * 180 }
+    private func point(cx: CGFloat, cy: CGFloat, radius: CGFloat, fraction f: Double) -> CGPoint {
+        let a = angle(fraction: f) * .pi / 180
+        return CGPoint(x: cx + radius * cos(a), y: cy - radius * sin(a))
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -219,48 +225,70 @@ private struct SpeedDialView: View {
             let cx = w / 2
             let cy = h - 8
             let r = min(w / 2 - 8, h - 16)
-            let mbps = downBytesPerSec * 8 / 1_000_000
-            let f = fraction(mbps: mbps)
+            let f = fraction(mbps: downBytesPerSec * 8 / 1_000_000)
             ZStack {
-                // 刻度盘底弧
-                Path { path in
-                    path.addArc(center: CGPoint(x: cx, y: cy), radius: r, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
-                }
-                .stroke(Color.white.opacity(0.10), lineWidth: 12)
-                // 进度弧
-                if f > 0.001 {
-                    Path { path in
-                        path.addArc(center: CGPoint(x: cx, y: cy), radius: r, startAngle: .degrees(180), endAngle: .degrees(angle(fraction: f)), clockwise: false)
-                    }
-                    .stroke(SpeedAppearance.color(hex: "#6FD8F0"), style: StrokeStyle(lineWidth: 12, lineCap: .round))
-                }
-                // 刻度 + 数字
+                trackArc(cx: cx, cy: cy, r: r)
+                progressArc(cx: cx, cy: cy, r: r, f: f)
                 ForEach(ticks, id: \.label) { tick in
-                    let a = angle(fraction: fraction(mbps: tick.mbps)) * .pi / 180
-                    let p1 = CGPoint(x: cx + (r - 16) * cos(a), y: cy - (r - 16) * sin(a))
-                    let p2 = CGPoint(x: cx + (r - 6) * cos(a), y: cy - (r - 6) * sin(a))
-                    Path { path in path.move(to: p1); path.addLine(to: p2) }
-                        .stroke(Color.white.opacity(0.35), lineWidth: 1.5)
-                    Text(tick.label)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.55))
-                        .position(x: cx + (r - 32) * cos(a), y: cy - (r - 32) * sin(a))
+                    DialTickMark(label: tick.label, center: CGPoint(x: cx, y: cy), r: r, angle: angle(fraction: fraction(mbps: tick.mbps)))
                 }
-                // 指针
-                let na = angle(fraction: f) * .pi / 180
-                Path { path in
-                    path.move(to: CGPoint(x: cx, y: cy))
-                    path.addLine(to: CGPoint(x: cx + (r - 24) * cos(na), y: cy - (r - 24) * sin(na)))
-                }
-                .stroke(Color.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                needle(cx: cx, cy: cy, r: r, f: f)
                 Circle().fill(Color.white).frame(width: 10, height: 10).position(x: cx, y: cy)
-                // 中间数字
                 VStack(spacing: 0) {
                     SpeedNumberText(text: downText, size: min(w * 0.18, 72), fontColorHex: fontColorHex)
                     Text("下载").font(.caption).foregroundStyle(.secondary)
                 }
                 .position(x: cx, y: cy - r * 0.45)
             }
+        }
+    }
+
+    private func trackArc(cx: CGFloat, cy: CGFloat, r: CGFloat) -> some View {
+        Path { path in
+            path.addArc(center: CGPoint(x: cx, y: cy), radius: r, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
+        }
+        .stroke(Color.white.opacity(0.10), lineWidth: 12)
+    }
+
+    private func progressArc(cx: CGFloat, cy: CGFloat, r: CGFloat, f: Double) -> some View {
+        Group {
+            if f > 0.001 {
+                Path { path in
+                    path.addArc(center: CGPoint(x: cx, y: cy), radius: r, startAngle: .degrees(180), endAngle: .degrees(angle(fraction: f)), clockwise: false)
+                }
+                .stroke(SpeedAppearance.color(hex: "#6FD8F0"), style: StrokeStyle(lineWidth: 12, lineCap: .round))
+            }
+        }
+    }
+
+    private func needle(cx: CGFloat, cy: CGFloat, r: CGFloat, f: Double) -> some View {
+        let tip = point(cx: cx, cy: cy, radius: r - 24, fraction: f)
+        return Path { path in
+            path.move(to: CGPoint(x: cx, y: cy))
+            path.addLine(to: tip)
+        }
+        .stroke(Color.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+    }
+}
+
+/// 表盘上一个刻度 + 数字（拆出来，免得编译器对一整个 ForEach 闭包做类型推断超时）。
+private struct DialTickMark: View {
+    var label: String
+    var center: CGPoint
+    var r: CGFloat
+    var angle: Double
+
+    var body: some View {
+        let a = angle * .pi / 180
+        let p1 = CGPoint(x: center.x + (r - 16) * cos(a), y: center.y - (r - 16) * sin(a))
+        let p2 = CGPoint(x: center.x + (r - 6) * cos(a), y: center.y - (r - 6) * sin(a))
+        ZStack {
+            Path { path in path.move(to: p1); path.addLine(to: p2) }
+                .stroke(Color.white.opacity(0.35), lineWidth: 1.5)
+            Text(label)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.55))
+                .position(x: center.x + (r - 32) * cos(a), y: center.y - (r - 32) * sin(a))
         }
     }
 }
