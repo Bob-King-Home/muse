@@ -122,6 +122,7 @@ final class SpeedEngine: ObservableObject {
 
     /// v2.5：用户在 App 里改了颜色/字号/底色，立即生效：
     /// 灵动岛 / 锁屏马上重推，画中画马上重画，不用等下一秒 tick，也不用重装。
+    @MainActor
     func refreshAppearance() {
         guard isRunning else { return }
         manager.refreshAppearance(downText: downText, upText: upText, isWiFi: isWiFi)
@@ -143,6 +144,7 @@ final class SpeedEngine: ObservableObject {
         timer = nil
     }
 
+    @MainActor
     func stop() {
         isRunning = false
         UserDefaults.standard.set(false, forKey: Self.wasRunningKey)
