@@ -1,12 +1,14 @@
 import SwiftUI
 
-/// v3.15：测速页（全球网测风格）——主动测速，节点可选。
+/// v3.16：测速页（全球网测风格）——多节点 + 推荐最快 + 失败自动换节点。
 /// 流程：Ping → 下载 → 上传；结果：下载 / 上传 / Ping 时延 / 抖动 / 公网 IP / 运营商 / 测速服务器。
 /// 只在前台跑；不弹窗（用户 2026-11-11：不要蜂窝提示弹窗，直接点开始就测）。
-/// 界面：顶部节点选择（中科大 / Cloudflare，选了就记住）+ 中央表盘
-/// （全球网测同款圆弧表盘：底圈 + 青色进度弧 + 中央大数字；不用刻度 ForEach，
+/// 界面：顶部节点选择（Cloudflare / Cachefly，带延迟和“推荐”标记，选了就记住）
+/// + 中央表盘（全球网测同款圆弧表盘：底圈 + 青色进度弧 + 中央大数字；不用刻度 ForEach，
 /// 刻度几何曾让编译器超时）+ 阶段进度 + 结果卡片。
 /// 表盘满格按 1000 Mbps 算，超过就顶满；中央数字测速中是实时速率，完成后是下载结果。
+/// 完整性：单项失败不判整场失败（Ping/下载/上传哪项没测到，那行显示“—”，
+/// 其余结果照常出）；下载失败自动换另一个节点再试；三项全失败才算失败。
 struct SpeedTestView: View {
     @StateObject private var tester = SpeedTestEngine()
 
@@ -22,25 +24,29 @@ struct SpeedTestView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 8)
 
-                // 测速节点（中科大 / Cloudflare），测速中不能换
-                HStack(spacing: 10) {
-                    Text("测速节点")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.85))
-                    Picker("测速节点", selection: $tester.node) {
+                // 测速节点：进页自动测一遍延迟，延迟最低的标“推荐”
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("测速节点")
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.85))
+                        Spacer()
+                        Button(tester.measuringNodes ? "测节点中…" : "重新测节点") {
+                            tester.measureNodes()
+                        }
+                        .font(.caption)
+                        .foregroundStyle(SpeedAppearance.color(hex: Self.accentHex))
+                        .disabled(tester.isRunning || tester.measuringNodes)
+                    }
+                    HStack(spacing: 10) {
                         ForEach(SpeedTestNode.all) { n in
-                            Text(n.name).tag(n)
+                            nodeButton(n)
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .disabled(tester.isRunning)
-                    Text(currentNodeLocation)
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.6))
-                        .lineLimit(1)
                 }
                 .padding(.top, 14)
                 .onChange(of: tester.node) { _, _ in tester.resetResults() }
+                .onAppear { tester.measureNodes() }
 
                 Spacer()
 
@@ -115,7 +121,7 @@ struct SpeedTestView: View {
                         .padding(.top, 8)
                 }
 
-                Text("测速会消耗流量（下载/上传几十 MB），只在前台进行；延迟为连接时间近似值，不是 ICMP Ping。")
+                Text("测速会消耗流量（下载/上传几十 MB），只在前台进行；延迟为连接时间近似值，不是 ICMP Ping。下载失败会自动换另一个节点再试。")
                     .font(.caption2).foregroundStyle(.white.opacity(0.85))
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -128,8 +134,49 @@ struct SpeedTestView: View {
         }
     }
 
-    private var currentNodeLocation: String {
-        tester.node.location
+    /// 节点按钮：名字 + 位置 + 延迟；延迟最低的标“推荐”；选中态青色边框。
+    /// 测速中不能换节点。
+    private func nodeButton(_ n: SpeedTestNode) -> some View {
+        let selected = tester.node.id == n.id
+        let recommended = tester.recommendedNode?.id == n.id
+        let latency = tester.nodeLatencyMs[n.id]
+        return Button {
+            guard !tester.isRunning else { return }
+            tester.node = n
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 4) {
+                    Text(n.name)
+                        .font(.subheadline).bold()
+                        .foregroundStyle(.white)
+                    if recommended {
+                        Text("推荐")
+                            .font(.caption2).bold()
+                            .foregroundStyle(SpeedAppearance.color(hex: "#0B1026"))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(SpeedAppearance.color(hex: Self.accentHex))
+                            .clipShape(Capsule())
+                    }
+                }
+                Text(n.location)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.6))
+                Text(latency.map { String(format: "延迟 %.0f ms", $0) } ?? (tester.measuringNodes ? "测延迟中…" : "延迟未测到"))
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(selected ? SpeedAppearance.color(hex: Self.accentHex).opacity(0.18) : Color.white.opacity(0.06))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(selected ? SpeedAppearance.color(hex: Self.accentHex) : Color.white.opacity(0.15), lineWidth: selected ? 1.5 : 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+        .disabled(tester.isRunning)
     }
 
     /// 表盘进度：测速中按实时速率（Mbps）/ 1000；完成后按下载结果 / 1000；平时 0。
