@@ -14,6 +14,17 @@ final class SpeedEngine: ObservableObject {
     /// v3.4：最近 60 次采样的下载速度，供主界面实时曲线画图（不新增采样）
     @Published private(set) var downHistory: [Double] = []
     private var historyBuffer: [Double] = []
+    /// v3.5：最近 60 次采样的上传速度（双线曲线用）
+    @Published private(set) var upHistory: [Double] = []
+    private var upHistoryBuffer: [Double] = []
+    /// v3.5：表盘用的当前下载速度（字节/秒，平滑后）
+    @Published private(set) var downBytesPerSec = 0.0
+    /// v3.5：网络信息（灵动岛展开页 + 主界面网络卡用），每 5 秒刷新一次
+    @Published private(set) var ssid = ""
+    @Published private(set) var ip = ""
+    @Published private(set) var netType = "Wi-Fi"
+    @Published private(set) var carrier = ""
+    private var tickCount = 0
     @Published var errorMessage: String?
 
     // intervalText 改成计算属性，不再存一份可能脱节的 @Published
@@ -45,6 +56,9 @@ final class SpeedEngine: ObservableObject {
         sampler.reset()
         lastDownText = ""; lastUpText = ""; lastPush = .distantPast
         historyBuffer = []; downHistory = []
+        upHistoryBuffer = []; upHistory = []
+        tickCount = 0
+        ssid = ""; ip = ""; netType = "Wi-Fi"; carrier = ""
         startTimerOnly()
         // v3.3：定位保活和采样一起开（前台点开始，系统允许后台继续定位）
         keepAlive.start()
@@ -81,6 +95,11 @@ final class SpeedEngine: ObservableObject {
         // 曲线数据每次采样都记（后台队列的私有缓冲，主线程再发布）
         historyBuffer.append(s.downSmoothed)
         if historyBuffer.count > 60 { historyBuffer.removeFirst(historyBuffer.count - 60) }
+        upHistoryBuffer.append(s.upSmoothed)
+        if upHistoryBuffer.count > 60 { upHistoryBuffer.removeFirst(upHistoryBuffer.count - 60) }
+        // v3.5：网络信息每 5 秒刷新一次（SSID 是异步回调，IP/制式/运营商是同步读）
+        tickCount += 1
+        if tickCount % 5 == 1 { refreshNetworkInfo(isWiFi: s.isWiFi) }
         let d = NetworkSpeedSampler.format(s.downSmoothed)
         let u = NetworkSpeedSampler.format(s.upSmoothed)
         let now = Date()
@@ -97,9 +116,32 @@ final class SpeedEngine: ObservableObject {
             self.upText = u
             self.isWiFi = s.isWiFi
             self.downHistory = self.historyBuffer
+            self.upHistory = self.upHistoryBuffer
+            self.downBytesPerSec = s.downSmoothed
             // v2.6：8 小时到期自动续期。不要只看 manager.isActive（系统结束 Activity 时
             // 它不会变 false），ensureActive() 每次都查系统里还活着的 Activity，没有就重建。
-            self.manager.ensureActive(downText: d, upText: u, down: s.downSmoothed, up: s.upSmoothed, isWiFi: s.isWiFi)
+            self.manager.ensureActive(downText: d, upText: u, down: s.downSmoothed, up: s.upSmoothed, isWiFi: s.isWiFi, ssid: self.ssid, ip: self.ip, netType: self.netType, carrier: self.carrier)
+        }
+    }
+
+    /// v3.5：刷新网络信息。IP/制式/运营商同步读完先发布；SSID 异步回来再补。
+    /// 注意：SSID 回调不一定在主线程，统一 dispatch 到主线程再写 @Published。
+    private func refreshNetworkInfo(isWiFi: Bool) {
+        let ip = NetworkInfo.currentIP(isWiFi: isWiFi)
+        let radio = NetworkInfo.radioAccess(isWiFi: isWiFi)
+        let carrier = NetworkInfo.carrierName()
+        let netType = isWiFi ? "Wi-Fi" : radio
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.ip = ip
+            self.netType = netType
+            self.carrier = carrier
+        }
+        guard isWiFi else { return }
+        NetworkInfo.fetchSSID { [weak self] ssid in
+            DispatchQueue.main.async {
+                self?.ssid = ssid
+            }
         }
     }
 
@@ -110,7 +152,7 @@ final class SpeedEngine: ObservableObject {
     @MainActor
     func refreshAppearance() {
         guard isRunning else { return }
-        manager.refreshAppearance(downText: downText, upText: upText, isWiFi: isWiFi)
+        manager.refreshAppearance(downText: downText, upText: upText, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
     }
 
     private func stopTimerOnly() {
@@ -133,6 +175,9 @@ final class SpeedEngine: ObservableObject {
         manager.stop()
         downText = "0 B/s"; upText = "0 B/s"
         historyBuffer = []; downHistory = []
+        upHistoryBuffer = []; upHistory = []
+        downBytesPerSec = 0
+        ssid = ""; ip = ""; netType = "Wi-Fi"; carrier = ""
         lastDownText = ""; lastUpText = ""; lastPush = .distantPast
     }
 

@@ -31,6 +31,13 @@ struct SpeedIslandLiveActivity: Widget {
                 // v3.2：数字直接切换，不淡入淡出
                 .contentTransition(.identity)
                 .transaction { $0.animation = nil; $0.disablesAnimations = true }
+                // v3.5：锁屏也显示网络信息（Wi-Fi 名 / 5G / IP）
+                Text(infoLine(state: context.state))
+                    .font(.caption2).foregroundStyle(.secondary)
+                if !context.state.ip.isEmpty {
+                    Text("IP \(context.state.ip)")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
             }
             .padding(12)
             .activityBackgroundTint(color(hex: context.state.backgroundHex).opacity(0.85))
@@ -56,26 +63,34 @@ struct SpeedIslandLiveActivity: Widget {
                         .transaction { $0.animation = nil; $0.disablesAnimations = true }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text(context.state.isWiFi ? "Wi-Fi" : "蜂窝")
-                        .font(.caption2).foregroundStyle(.secondary)
+                    // v3.5：展开页显示网络信息（Wi-Fi 名 / 5G / 运营商 / IP）
+                    VStack(spacing: 2) {
+                        Text(infoLine(state: context.state))
+                            .font(.caption2).foregroundStyle(fontColor)
+                        if !context.state.ip.isEmpty {
+                            Text("IP \(context.state.ip)")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
                 }
             } compactLeading: {
-                // 只放短数字：12.4M，比 ↓12.4 MB/s 省一半宽度
-                Text("↓\(short(context.state.downText))")
+                // v3.5：定宽显示（"↓ 850K" / "↓ 10.8M" 都是 6 字符），
+                // 宽度不再随网速变长变短来回跳
+                Text("↓\(fixedShort(context.state.downText))")
                     .font(.system(size: islandSize, design: .monospaced))
                     .foregroundStyle(fontColor)
                     .contentTransition(.identity)
                     .animation(nil, value: context.state.downText)
                     .transaction { $0.animation = nil; $0.disablesAnimations = true }
             } compactTrailing: {
-                Text("↑\(short(context.state.upText))")
+                Text("↑\(fixedShort(context.state.upText))")
                     .font(.system(size: islandSize, design: .monospaced))
                     .foregroundStyle(fontColor)
                     .contentTransition(.identity)
                     .animation(nil, value: context.state.upText)
                     .transaction { $0.animation = nil; $0.disablesAnimations = true }
             } minimal: {
-                Text("↓\(short(context.state.downText))")
+                Text("↓\(fixedShort(context.state.downText))")
                     .font(.system(size: islandSize, design: .monospaced))
                     .foregroundStyle(fontColor)
                     .contentTransition(.identity)
@@ -83,6 +98,30 @@ struct SpeedIslandLiveActivity: Widget {
                     .transaction { $0.animation = nil; $0.disablesAnimations = true }
             }
         }
+    }
+
+    /// v3.5：网络信息行。Wi-Fi："Wi-Fi · SSID名"；蜂窝："5G · 中国电信"。
+    /// SSID 读不到时只显示 "Wi-Fi"。
+    private func infoLine(state: SpeedActivityAttributes.ContentState) -> String {
+        if state.isWiFi {
+            return state.ssid.isEmpty ? "Wi-Fi" : "Wi-Fi · \(state.ssid)"
+        } else {
+            return state.carrier.isEmpty ? state.netType : "\(state.netType) · \(state.carrier)"
+        }
+    }
+
+    /// v3.5：定宽短格式。先缩成 "12.4M" / "850K" / "0"，再补空格到 5 字符，
+    /// 等宽字体下宽度恒定，灵动岛不再一会长一会短。
+    private func fixedShort(_ s: String) -> String {
+        var t = short(s)
+        if t.count > 5, let dot = t.firstIndex(of: ".") {
+            // "1234.5M" -> "1234M"（去小数点保宽度）
+            let intPart = t[..<dot]
+            let unit = t.last.map { String($0) } ?? ""
+            t = String(intPart) + unit
+        }
+        if t.count >= 5 { return String(t.prefix(5)) }
+        return String(repeating: " ", count: 5 - t.count) + t
     }
 
     private func short(_ s: String) -> String {

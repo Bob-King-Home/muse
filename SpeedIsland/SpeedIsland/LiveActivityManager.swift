@@ -18,6 +18,12 @@ final class LiveActivityManager: ObservableObject {
     private var lastDownText = ""
     private var lastUpText = ""
     private var lastPush = Date.distantPast
+    // v3.5：记上次推的网络信息，变了也要推一次（和外观一样，不然只改 SSID/IP
+    // 不改网速时 update() 的 changed 判断会直接 return）
+    private var lastSsid = ""
+    private var lastIp = ""
+    private var lastNetType = ""
+    private var lastCarrier = ""
     private var startTask: Task<Void, Never>?
     private var updateTask: Task<Void, Never>?
     // v2.5：记上次推的外观，改了颜色/字号/底色就算“变了”，也要推一次，
@@ -27,14 +33,18 @@ final class LiveActivityManager: ObservableObject {
     private var lastBackgroundHex = ""
 
     /// v2.5：从 UserDefaults 读当前外观，打包进 ContentState 推给 Widget。
-    private func currentState(downText: String, upText: String, isWiFi: Bool) -> SpeedActivityAttributes.ContentState {
+    private func currentState(downText: String, upText: String, isWiFi: Bool, ssid: String = "", ip: String = "", netType: String = "Wi-Fi", carrier: String = "") -> SpeedActivityAttributes.ContentState {
         SpeedActivityAttributes.ContentState(
             downText: downText,
             upText: upText,
             isWiFi: isWiFi,
             fontColorHex: SpeedAppearance.fontColorHex,
             fontSizeLevel: SpeedAppearance.fontSizeLevel,
-            backgroundHex: SpeedAppearance.backgroundHex
+            backgroundHex: SpeedAppearance.backgroundHex,
+            ssid: ssid,
+            ip: ip,
+            netType: netType,
+            carrier: carrier
         )
     }
 
@@ -44,17 +54,25 @@ final class LiveActivityManager: ObservableObject {
             || SpeedAppearance.backgroundHex != lastBackgroundHex
     }
 
+    private func netInfoChanged(ssid: String, ip: String, netType: String, carrier: String) -> Bool {
+        ssid != lastSsid || ip != lastIp || netType != lastNetType || carrier != lastCarrier
+    }
+
     private func rememberAppearance() {
         lastFontColorHex = SpeedAppearance.fontColorHex
         lastFontSizeLevel = SpeedAppearance.fontSizeLevel
         lastBackgroundHex = SpeedAppearance.backgroundHex
     }
 
+    private func rememberNetInfo(ssid: String, ip: String, netType: String, carrier: String) {
+        lastSsid = ssid; lastIp = ip; lastNetType = netType; lastCarrier = carrier
+    }
+
     var frequentUpdatesEnabled: Bool {
         ActivityAuthorizationInfo().frequentPushesEnabled
     }
 
-    func start(downText: String, upText: String, down: Double, up: Double, isWiFi: Bool) {
+    func start(downText: String, upText: String, down: Double, up: Double, isWiFi: Bool, ssid: String = "", ip: String = "", netType: String = "Wi-Fi", carrier: String = "") {
         let info = ActivityAuthorizationInfo()
         guard info.areActivitiesEnabled else {
             errorMessage = "实时活动被关了：去设置 > SpeedIsland > 实时活动打开"
@@ -66,7 +84,7 @@ final class LiveActivityManager: ObservableObject {
         if let existing = Activity<SpeedActivityAttributes>.activities.first {
             activity = existing
             isActive = true
-            update(downText: downText, upText: upText, down: down, up: up, isWiFi: isWiFi)
+            update(downText: downText, upText: upText, down: down, up: up, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
             return
         }
         startTask?.cancel()
@@ -74,11 +92,12 @@ final class LiveActivityManager: ObservableObject {
             // 串行：先等旧的结束完，再 request，不再异步竞态
             if let old = activity { await old.end(nil, dismissalPolicy: .immediate) }
             let attrs = SpeedActivityAttributes()
-            let state = currentState(downText: downText, upText: upText, isWiFi: isWiFi)
+            let state = currentState(downText: downText, upText: upText, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
             do {
                 activity = try Activity.request(attributes: attrs, content: .init(state: state, staleDate: Date().addingTimeInterval(10)))
                 lastDownText = downText; lastUpText = upText; lastPush = Date()
                 rememberAppearance()
+                rememberNetInfo(ssid: ssid, ip: ip, netType: netType, carrier: carrier)
                 isActive = true
                 errorMessage = nil
             } catch {
@@ -87,17 +106,18 @@ final class LiveActivityManager: ObservableObject {
         }
     }
 
-    func update(downText: String, upText: String, down: Double, up: Double, isWiFi: Bool) {
+    func update(downText: String, upText: String, down: Double, up: Double, isWiFi: Bool, ssid: String = "", ip: String = "", netType: String = "Wi-Fi", carrier: String = "") {
         guard let activity else { return }
         let now = Date()
-        let changed = downText != lastDownText || upText != lastUpText || appearanceChanged()
+        let changed = downText != lastDownText || upText != lastUpText || appearanceChanged() || netInfoChanged(ssid: ssid, ip: ip, netType: netType, carrier: carrier)
         let overdue = now.timeIntervalSince(lastPush) >= 4.0
         guard changed || overdue else { return }
         lastDownText = downText; lastUpText = upText; lastPush = now
         rememberAppearance()
+        rememberNetInfo(ssid: ssid, ip: ip, netType: netType, carrier: carrier)
         updateTask?.cancel()
         updateTask = Task {
-            let state = currentState(downText: downText, upText: upText, isWiFi: isWiFi)
+            let state = currentState(downText: downText, upText: upText, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
             await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(10)))
         }
     }
@@ -109,27 +129,28 @@ final class LiveActivityManager: ObservableObject {
     /// 有就 update，没有就 start() 重建。
     /// 注意：灵动岛被用户手动划掉也会重建（App 还在跑就认为还要显示），要彻底关掉
     /// 点 App 里的“停止”。
-    func ensureActive(downText: String, upText: String, down: Double, up: Double, isWiFi: Bool) {
+    func ensureActive(downText: String, upText: String, down: Double, up: Double, isWiFi: Bool, ssid: String = "", ip: String = "", netType: String = "Wi-Fi", carrier: String = "") {
         if let live = Activity<SpeedActivityAttributes>.activities.first {
             activity = live
             isActive = true
-            update(downText: downText, upText: upText, down: down, up: up, isWiFi: isWiFi)
+            update(downText: downText, upText: upText, down: down, up: up, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
         } else {
             activity = nil
             isActive = false
-            start(downText: downText, upText: upText, down: down, up: up, isWiFi: isWiFi)
+            start(downText: downText, upText: upText, down: down, up: up, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
         }
     }
 
     /// v2.5：用户在 App 里改了颜色/字号/底色，立即把当前网速 + 新外观推给灵动岛 / 锁屏，
     /// 不用等下一秒 tick，也不用重装。
-    func refreshAppearance(downText: String, upText: String, isWiFi: Bool) {
+    func refreshAppearance(downText: String, upText: String, isWiFi: Bool, ssid: String = "", ip: String = "", netType: String = "Wi-Fi", carrier: String = "") {
         guard let activity else { return }
         lastPush = Date()
         rememberAppearance()
+        rememberNetInfo(ssid: ssid, ip: ip, netType: netType, carrier: carrier)
         updateTask?.cancel()
         updateTask = Task {
-            let state = currentState(downText: downText, upText: upText, isWiFi: isWiFi)
+            let state = currentState(downText: downText, upText: upText, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
             await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(10)))
         }
     }
@@ -142,6 +163,7 @@ final class LiveActivityManager: ObservableObject {
         isActive = false
         lastDownText = ""; lastUpText = ""
         lastFontColorHex = ""; lastFontSizeLevel = -1; lastBackgroundHex = ""
+        lastSsid = ""; lastIp = ""; lastNetType = ""; lastCarrier = ""
     }
 
     func stop() { Task { await end() } }

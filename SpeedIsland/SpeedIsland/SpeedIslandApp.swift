@@ -50,7 +50,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                 upText: NetworkSpeedSampler.format(s.upSmoothed),
                 down: s.downSmoothed,
                 up: s.upSmoothed,
-                isWiFi: s.isWiFi
+                isWiFi: s.isWiFi,
+                ip: NetworkInfo.currentIP(isWiFi: s.isWiFi),
+                netType: NetworkInfo.radioAccess(isWiFi: s.isWiFi),
+                carrier: NetworkInfo.carrierName()
             )
             completionHandler(.newData)
         }
