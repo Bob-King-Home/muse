@@ -42,7 +42,7 @@ struct ContentView: View {
                             Button { showAppearance = true } label: {
                                 Image(systemName: "gearshape")
                                     .font(.title3)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.white.opacity(0.85))
                                     .frame(width: 40, height: 40)
                                     .background(Color.gray.opacity(0.15))
                                     .clipShape(Circle())
@@ -76,7 +76,7 @@ struct ContentView: View {
                         legendDot(hex: Self.upHex, text: "上传")
                         Spacer()
                     }
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(.white)
                     .padding(.top, 20)
                     DashboardGraphView(down: engine.downHistory, up: engine.upHistory)
                         .frame(height: graphHeight(height: geo.size.height))
@@ -85,7 +85,7 @@ struct ContentView: View {
                     // 网络信息行：Wi-Fi 名 / 运营商 / IP
                     Text(networkDetail)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.white)
                         .lineLimit(1)
                         .padding(.top, 12)
 
@@ -109,7 +109,7 @@ struct ContentView: View {
                         .buttonStyle(.plain)
                     }
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white)
                     .padding(.top, 8)
 
                     Spacer()
@@ -131,7 +131,7 @@ struct ContentView: View {
                         Text(engine.isRunning ? (engine.islandEnabled ? (manager.isActive ? "运行中 · \(engine.intervalText)刷新" : "运行中 · 灵动岛启动中") : "运行中 · 灵动岛已关") : "已停止")
                         Text(keepAlive.statusText)
                     }
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(.white)
                     .padding(.top, 14)
 
                     // v3.12：灵动岛开关 —— 关掉后 App 继续跑、主界面照常显示，只是不推灵动岛
@@ -144,7 +144,7 @@ struct ContentView: View {
                         ))
                         .labelsHidden()
                     }
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(.white)
                     .padding(.top, 10)
 
                     if let err = engine.errorMessage ?? manager.errorMessage {
@@ -155,8 +155,11 @@ struct ContentView: View {
                             .padding(.top, 8)
                     }
 
-                    Text("开始后定位保活让 App 在后台持续运行；状态栏会显示定位箭头。点停止后保活结束，箭头消失。关掉灵动岛开关会同时停掉定位保活，岛上什么都不留；再打开就一起恢复。")
-                        .font(.caption2).foregroundStyle(.secondary)
+                    // v3.15：脚注改短（之前四句太啰嗦）+ 小字改白（用户说灰字看不清）。
+                    // 内容：定位保活让 App 后台持续运行，状态栏会显示定位箭头；
+                    // 点停止后箭头消失；关掉灵动岛会同时停掉保活，岛上什么都不留，再打开一起恢复。
+                    Text("定位保活让 App 在后台持续运行，状态栏会显示定位箭头；点停止后箭头消失。关掉灵动岛会同时停掉保活，岛上什么都不留，再打开一起恢复。")
+                        .font(.caption2).foregroundStyle(.white.opacity(0.85))
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.top, 12)
