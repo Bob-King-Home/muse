@@ -24,6 +24,11 @@ final class LocationKeepAlive: NSObject, ObservableObject, CLLocationManagerDele
         manager.activityType = .other
         manager.pausesLocationUpdatesAutomatically = false
         manager.allowsBackgroundLocationUpdates = true
+        // v3.6：不显示系统定位指示（灵动岛里的蓝色箭头和状态栏的定位箭头）。
+        // 定位保活照常用，App 自己界面里有“定位保活：运行中”，用户自己知道在定位。
+        // 注意：这是苹果提供的开关，但不保证在所有 iOS 版本上都藏得住岛上的箭头；
+        // 如果这版装上箭头还在，就只能关定位保活（岛会冻住），到时再加开关让用户自己选。
+        manager.showsBackgroundLocationIndicator = false
     }
 
     /// 主线程调用（开始按钮、restoreIfNeeded 都是前台主线程）。

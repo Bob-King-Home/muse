@@ -92,7 +92,8 @@ struct SpeedIslandLiveActivity: Widget {
                     .animation(nil, value: context.state.upText)
                     .transaction { $0.animation = nil; $0.disablesAnimations = true }
             } minimal: {
-                Text("↓\(fixedShort(context.state.downText))")
+                // v3.6：小圆点里地方小，用不补空格的短格式，少截断（定宽只在主岛有用）
+                Text("↓\(short(context.state.downText))")
                     .font(.system(size: islandSize, design: .monospaced))
                     .foregroundStyle(fontColor)
                     .contentTransition(.identity)
