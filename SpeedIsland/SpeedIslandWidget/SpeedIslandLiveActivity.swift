@@ -73,13 +73,13 @@ struct SpeedIslandLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     // v3.5：展开页显示网络信息（Wi-Fi 名 / 5G / 运营商 / IP）
+                    // v3.19：用户反馈展开页四角太圆、内容被裁切 ——
+                    // 岛的圆角是系统定的改不了，只能让内容往里收：
+                    // IP 那行拿掉（锁屏上还有），只留两行，左右各加 8pt 内边距，
+                    // 文字不再顶到圆角边缘。
                     VStack(spacing: 2) {
                         Text(infoLine(state: context.state))
                             .font(.caption2).foregroundStyle(fontColor)
-                        if !context.state.ip.isEmpty {
-                            Text("IP \(context.state.ip)")
-                                .font(.caption2).foregroundStyle(.secondary)
-                        }
                         // v3.13：苹果倒计时的逻辑 —— 系统本地每秒渲染，不用 App 推送
                         HStack(spacing: 4) {
                             Text("已运行")
@@ -87,6 +87,7 @@ struct SpeedIslandLiveActivity: Widget {
                         }
                         .font(.caption2).foregroundStyle(fontColor)
                     }
+                    .padding(.horizontal, 8)
                 }
             } compactLeading: {
                 // v3.16：定宽改用固定宽度框 + 右对齐，不再用前导空格补位。
