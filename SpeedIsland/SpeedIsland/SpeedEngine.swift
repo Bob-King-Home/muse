@@ -17,8 +17,15 @@ final class SpeedEngine: ObservableObject {
     /// v3.5：最近 60 次采样的上传速度（双线曲线用）
     @Published private(set) var upHistory: [Double] = []
     private var upHistoryBuffer: [Double] = []
-    /// v3.5：表盘用的当前下载速度（字节/秒，平滑后）
-    @Published private(set) var downBytesPerSec = 0.0
+    /// v3.7：本节累计流量和峰值（主界面展示用）
+    @Published private(set) var totalDown: Double = 0
+    @Published private(set) var totalUp: Double = 0
+    @Published private(set) var peakDown: Double = 0
+    @Published private(set) var peakUp: Double = 0
+    private var totalDownBytes: Double = 0
+    private var totalUpBytes: Double = 0
+    private var peakDownRate: Double = 0
+    private var peakUpRate: Double = 0
     /// v3.5：网络信息（灵动岛展开页 + 主界面网络卡用），每 5 秒刷新一次
     @Published private(set) var ssid = ""
     @Published private(set) var ip = ""
@@ -65,6 +72,8 @@ final class SpeedEngine: ObservableObject {
         tickCount = 0
         ssid = ""; ip = ""; netType = "Wi-Fi"; carrier = ""
         lastNetType = "Wi-Fi"; lastIP = ""; lastCarrier = ""
+        totalDownBytes = 0; totalUpBytes = 0; peakDownRate = 0; peakUpRate = 0
+        totalDown = 0; totalUp = 0; peakDown = 0; peakUp = 0
         startTimerOnly()
         // v3.5：约好后台刷新看门狗（系统定时把 App 拉起来推一次灵动岛），
         // 这样 App 万一被游戏等挤掉，也能自己恢复，不用等用户手动打开
@@ -106,6 +115,11 @@ final class SpeedEngine: ObservableObject {
         if historyBuffer.count > 60 { historyBuffer.removeFirst(historyBuffer.count - 60) }
         upHistoryBuffer.append(s.upSmoothed)
         if upHistoryBuffer.count > 60 { upHistoryBuffer.removeFirst(upHistoryBuffer.count - 60) }
+        // v3.7：累计本节流量和峰值（平滑速率 × 间隔估算；低电量 5 秒间隔也适用）
+        totalDownBytes += s.downSmoothed * refreshInterval
+        totalUpBytes += s.upSmoothed * refreshInterval
+        peakDownRate = max(peakDownRate, s.downSmoothed)
+        peakUpRate = max(peakUpRate, s.upSmoothed)
         tickCount += 1
         // v3.6：网络信息每秒都刷新（原来 5 秒一次），切 5G/Wi-Fi 立刻感知。
         // IP/制式/运营商是同步读，很便宜；SSID 是异步回调，Wi-Fi 下每 5 秒查一次。
@@ -144,7 +158,10 @@ final class SpeedEngine: ObservableObject {
             self.isWiFi = s.isWiFi
             self.downHistory = self.historyBuffer
             self.upHistory = self.upHistoryBuffer
-            self.downBytesPerSec = s.downSmoothed
+            self.totalDown = self.totalDownBytes
+            self.totalUp = self.totalUpBytes
+            self.peakDown = self.peakDownRate
+            self.peakUp = self.peakUpRate
             self.ip = ip
             self.netType = netType
             self.carrier = carrier
@@ -186,7 +203,8 @@ final class SpeedEngine: ObservableObject {
         downText = "0 B/s"; upText = "0 B/s"
         historyBuffer = []; downHistory = []
         upHistoryBuffer = []; upHistory = []
-        downBytesPerSec = 0
+        totalDownBytes = 0; totalUpBytes = 0; peakDownRate = 0; peakUpRate = 0
+        totalDown = 0; totalUp = 0; peakDown = 0; peakUp = 0
         ssid = ""; ip = ""; netType = "Wi-Fi"; carrier = ""
         lastDownText = ""; lastUpText = ""; lastPush = .distantPast
         lastNetType = "Wi-Fi"; lastIP = ""; lastCarrier = ""

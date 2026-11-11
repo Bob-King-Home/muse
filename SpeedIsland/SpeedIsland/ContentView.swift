@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // v3.5：按用户选定的深色仪表盘 mockup（media-generation-speedisland-ui-dark）
 // 结合实际功能改 ——
@@ -86,9 +87,20 @@ struct ContentView: View {
                         .lineLimit(1)
                         .padding(.top, 12)
 
+                    // v3.7：本节流量和峰值
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("本节流量  ↓ \(NetworkSpeedSampler.formatBytes(engine.totalDown))  ·  ↑ \(NetworkSpeedSampler.formatBytes(engine.totalUp))")
+                        Text("峰值速度  ↓ \(NetworkSpeedSampler.format(engine.peakDown))  ·  ↑ \(NetworkSpeedSampler.format(engine.peakUp))")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 8)
+
                     Spacer()
 
                     Button(engine.isRunning ? "停止" : "开始") {
+                        // v3.7：点按给个轻震动，按钮立刻有反馈，不会觉得“没反应”
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         engine.isRunning ? engine.stop() : engine.start()
                     }
                     .font(.headline)

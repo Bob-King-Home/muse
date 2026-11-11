@@ -152,4 +152,12 @@ final class NetworkSpeedSampler {
         if bytesPerSec < 1024 * 1024 { return String(format: "%.0f KB/s", bytesPerSec / 1024) }
         return String(format: "%.1f MB/s", bytesPerSec / 1024 / 1024)
     }
+
+    /// v3.7：累计流量格式（不带 /s）：850 KB、12.3 MB、1.24 GB
+    static func formatBytes(_ bytes: Double) -> String {
+        if bytes < 1024 { return String(format: "%.0f B", bytes) }
+        if bytes < 1024 * 1024 { return String(format: "%.1f KB", bytes / 1024) }
+        if bytes < 1024 * 1024 * 1024 { return String(format: "%.1f MB", bytes / 1024 / 1024) }
+        return String(format: "%.2f GB", bytes / 1024 / 1024 / 1024)
+    }
 }
