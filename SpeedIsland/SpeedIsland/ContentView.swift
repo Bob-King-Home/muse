@@ -20,6 +20,7 @@ struct ContentView: View {
     @AppStorage(SpeedAppearance.backgroundKey) private var backgroundHex = SpeedAppearance.defaultBackground
     @AppStorage(SpeedAppearance.fontWeightKey) private var fontWeightRaw = SpeedAppearance.defaultFontWeight
     @AppStorage(SpeedAppearance.fontDesignKey) private var fontDesignRaw = SpeedAppearance.defaultFontDesign
+    @AppStorage(SpeedAppearance.fontFamilyKey) private var fontFamilyRaw = SpeedAppearance.defaultFontFamily
     @State private var showAppearance = false
 
     private static let accentHex = "#6FD8F0"
@@ -58,7 +59,7 @@ struct ContentView: View {
                         .padding(.top, 18)
 
                     // 下载超大数字（mockup 里的主数字）
-                    SpeedNumberText(text: engine.downText, size: downSize(width: geo.size.width), unitScale: 0.55, fontColorHex: fontColorHex, weight: SpeedAppearance.fontWeight, design: SpeedAppearance.fontDesign)
+                    SpeedNumberText(text: engine.downText, size: downSize(width: geo.size.width), unitScale: 0.55, fontColorHex: fontColorHex, weight: SpeedAppearance.fontWeight)
                         .padding(.top, 10)
 
                     // 上传
@@ -67,7 +68,7 @@ struct ContentView: View {
                         .tracking(2)
                         .foregroundStyle(SpeedAppearance.color(hex: Self.accentHex))
                         .padding(.top, 18)
-                    SpeedNumberText(text: engine.upText, size: upSize(width: geo.size.width), unitScale: 0.55, fontColorHex: fontColorHex, weight: SpeedAppearance.fontWeight, design: SpeedAppearance.fontDesign)
+                    SpeedNumberText(text: engine.upText, size: upSize(width: geo.size.width), unitScale: 0.55, fontColorHex: fontColorHex, weight: SpeedAppearance.fontWeight)
                         .padding(.top, 2)
 
                     // 图例 + 网格曲线
@@ -78,9 +79,24 @@ struct ContentView: View {
                     }
                     .font(.caption).foregroundStyle(.white)
                     .padding(.top, 20)
-                    DashboardGraphView(down: engine.downHistory, up: engine.upHistory)
+                    // v3.19：曲线左侧加网速刻度（最大值 / 一半 / 0），不然光看线不知道多快。
+                    // 刻度用最大值算（下载/上传历史里的最大值），和曲线共用同一个 max。
+                    HStack(alignment: .top, spacing: 6) {
+                        VStack {
+                            Text(scaleText(graphMax))
+                            Spacer()
+                            Text(scaleText(graphMax / 2))
+                            Spacer()
+                            Text("0")
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.6))
+                        .frame(width: 32, alignment: .trailing)
                         .frame(height: graphHeight(height: geo.size.height))
-                        .padding(.top, 6)
+                        DashboardGraphView(down: engine.downHistory, up: engine.upHistory)
+                            .frame(height: graphHeight(height: geo.size.height))
+                    }
+                    .padding(.top, 6)
 
                     // 网络信息行：Wi-Fi 名 / 运营商 / IP
                     Text(networkDetail)
@@ -127,12 +143,11 @@ struct ContentView: View {
                     .clipShape(Capsule())
                     .buttonStyle(.plain)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(engine.isRunning ? (engine.islandEnabled ? (manager.isActive ? "运行中 · \(engine.intervalText)刷新" : "运行中 · 灵动岛启动中") : "运行中 · 灵动岛已关") : "已停止")
-                        Text(keepAlive.statusText)
-                    }
-                    .font(.caption).foregroundStyle(.white)
-                    .padding(.top, 14)
+                    // v3.19：状态收成一行（原来两行 + 脚注三行太占地方）。
+                    // 定位保活出问题（未授权/出错）时显示它的问题，不然只说“定位保活中”。
+                    Text(statusLine)
+                        .font(.caption).foregroundStyle(.white)
+                        .padding(.top, 14)
 
                     // v3.12：灵动岛开关 —— 关掉后 App 继续跑、主界面照常显示，只是不推灵动岛
                     HStack {
@@ -155,10 +170,8 @@ struct ContentView: View {
                             .padding(.top, 8)
                     }
 
-                    // v3.15：脚注改短（之前四句太啰嗦）+ 小字改白（用户说灰字看不清）。
-                    // 内容：定位保活让 App 后台持续运行，状态栏会显示定位箭头；
-                    // 点停止后箭头消失；关掉灵动岛会同时停掉保活，岛上什么都不留，再打开一起恢复。
-                    Text("定位保活让 App 在后台持续运行，状态栏会显示定位箭头；点停止后箭头消失。关掉灵动岛会同时停掉保活，岛上什么都不留，再打开一起恢复。")
+                    // v3.19：脚注再缩成一句（用户说底部太啰嗦）。
+                    Text("定位保活让 App 在后台运行，状态栏会显示定位箭头；关灵动岛会同时停掉保活。")
                         .font(.caption2).foregroundStyle(.white.opacity(0.85))
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity, alignment: .center)
@@ -174,7 +187,7 @@ struct ContentView: View {
             if newPhase == .active { engine.resumeAfterBackground() }
         }
         .sheet(isPresented: $showAppearance) {
-            AppearanceSheetView(fontColorHex: $fontColorHex, fontSizeLevel: $fontSizeLevel, backgroundHex: $backgroundHex, fontWeightRaw: $fontWeightRaw, fontDesignRaw: $fontDesignRaw) {
+            AppearanceSheetView(fontColorHex: $fontColorHex, fontSizeLevel: $fontSizeLevel, backgroundHex: $backgroundHex, fontWeightRaw: $fontWeightRaw, fontDesignRaw: $fontDesignRaw, fontFamilyRaw: $fontFamilyRaw) {
                 engine.refreshAppearance()
             }
         }
@@ -193,9 +206,39 @@ struct ContentView: View {
         .overlay(Capsule().stroke(SpeedAppearance.color(hex: Self.accentHex).opacity(0.6), lineWidth: 1))
     }
 
+    /// v3.19：底部状态一行。定位保活出问题（未授权/出错/未启动）时直接显示它的问题，
+    /// 不然只说“定位保活中”——人只要知道在跑就行。
+    private var statusLine: String {
+        guard engine.isRunning else { return "已停止" }
+        let keep = keepAlive.statusText
+        if keep.contains("未授权") || keep.contains("出错") {
+            return "运行中 · \(keep)"
+        }
+        if !engine.islandEnabled { return "运行中 · \(engine.intervalText)刷新 · 灵动岛已关" }
+        if !manager.isActive { return "运行中 · 灵动岛启动中" }
+        return "运行中 · \(engine.intervalText)刷新 · 定位保活中"
+    }
+
     private var badgeText: String {
         if engine.isWiFi { return "Wi-Fi" }
         return engine.carrier.isEmpty ? engine.netType : "\(engine.netType) · \(engine.carrier)"
+    }
+
+    /// v3.19：曲线刻度的最大值（下载/上传历史里的最大值，至少 1，和 DashboardGraphView 共用）。
+    private var graphMax: Double {
+        max(engine.downHistory.max() ?? 0, engine.upHistory.max() ?? 0, 1)
+    }
+
+    /// v3.19：刻度短格式（"12M" / "5.5M" / "850K"），不带 "/s"，刻度列放得下。
+    private func scaleText(_ bytesPerSec: Double) -> String {
+        if bytesPerSec >= 1_000_000 {
+            let m = bytesPerSec / 1_000_000
+            return m >= 10 ? String(format: "%.0fM", m) : String(format: "%.1fM", m)
+        }
+        if bytesPerSec >= 1_000 {
+            return String(format: "%.0fK", bytesPerSec / 1_000)
+        }
+        return "0"
     }
 
     private var networkDetail: String {
@@ -234,6 +277,9 @@ struct ContentView: View {
 /// 字重从外观设置读（默认加粗）；数字加 .monospacedDigit() 让数字等宽，
 /// 数字变长变短时宽度不跳（不加这个，系统字体下 "1" 比 "8" 窄，数字会左右晃）。
 /// v3.10：字体可选手册（默认 / 圆体 / 衬线 / 等宽），从外观设置读。
+/// v3.19：字体族（系统 / 苹方 / 黑体 / 宋体）—— 字体走 SpeedAppearance.numberFont，
+/// 选了字体族就用 .custom 族名，否则用系统字体 + Font.Design；
+/// 不管哪种都加 .monospacedDigit()，数字宽度不跳。
 /// 不加阴影（每秒重绘的阴影是卡顿主因之一）。
 private struct SpeedNumberText: View {
     var text: String
@@ -241,7 +287,6 @@ private struct SpeedNumberText: View {
     var unitScale: CGFloat = 0.32
     var fontColorHex: String
     var weight: Font.Weight = .bold
-    var design: Font.Design = .default
 
     var body: some View {
         let parts = text.split(separator: " ")
@@ -249,10 +294,10 @@ private struct SpeedNumberText: View {
         let unit = parts.count > 1 ? String(parts[1]) : ""
         HStack(alignment: .lastTextBaseline, spacing: 4) {
             Text(digits)
-                .font(.system(size: size, weight: weight, design: design).monospacedDigit())
+                .font(SpeedAppearance.numberFont(size: size, weight: weight).monospacedDigit())
                 .foregroundStyle(SpeedAppearance.color(hex: fontColorHex))
             Text(unit)
-                .font(.system(size: max(size * unitScale, 11), weight: .semibold, design: design))
+                .font(SpeedAppearance.numberFont(size: max(size * unitScale, 11), weight: .semibold))
                 .foregroundStyle(SpeedAppearance.color(hex: fontColorHex).opacity(0.75))
         }
         .contentTransition(.identity)
@@ -349,13 +394,14 @@ private struct DashboardGraphView: View {
     }
 }
 
-/// 外观设置弹窗：字体颜色 / 字号 / 字体粗细 / 字体 / 背景底色，改完立即生效（推给灵动岛 / 锁屏）。
+/// 外观设置弹窗：字体颜色 / 字号 / 字体粗细 / 字体族 / 字体 / 背景底色，改完立即生效（推给灵动岛 / 锁屏）。
 private struct AppearanceSheetView: View {
     @Binding var fontColorHex: String
     @Binding var fontSizeLevel: Int
     @Binding var backgroundHex: String
     @Binding var fontWeightRaw: String
     @Binding var fontDesignRaw: String
+    @Binding var fontFamilyRaw: String
     var onChange: () -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -399,15 +445,30 @@ private struct AppearanceSheetView: View {
                     .pickerStyle(.segmented)
                     .onChange(of: fontWeightRaw) { _, _ in onChange() }
                 }
-                Section("字体") {
-                    // v3.10：字体选择（默认系统 / 圆体 / 衬线 / 等宽），只改主界面大数字
-                    Picker("字体", selection: $fontDesignRaw) {
-                        ForEach(SpeedAppearance.fontDesignNames, id: \.self) { name in
+                Section("字体族") {
+                    // v3.19：字体族（系统 / 苹方 / 黑体 / 宋体），只改主界面大数字；
+                    // 灵动岛 / 锁屏永远用等宽，不受这里影响（不然岛上数字会乎大乎小）。
+                    Picker("字体族", selection: $fontFamilyRaw) {
+                        ForEach(SpeedAppearance.fontFamilyNames, id: \.self) { name in
                             Text(name).tag(name)
                         }
                     }
                     .pickerStyle(.segmented)
-                    .onChange(of: fontDesignRaw) { _, _ in onChange() }
+                    .onChange(of: fontFamilyRaw) { _, _ in onChange() }
+                }
+                // v3.19：字体样式（默认 / 圆体 / 衬线 / 等宽）只在字体族选“系统”时生效；
+                // 选了具体字体族（苹方/黑体/宋体）就用那个族的字体，样式这行藏起来。
+                if fontFamilyRaw == SpeedAppearance.defaultFontFamily {
+                    Section("字体样式") {
+                        // v3.10：字体选择（默认系统 / 圆体 / 衬线 / 等宽），只改主界面大数字
+                        Picker("字体样式", selection: $fontDesignRaw) {
+                            ForEach(SpeedAppearance.fontDesignNames, id: \.self) { name in
+                                Text(name).tag(name)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .onChange(of: fontDesignRaw) { _, _ in onChange() }
+                    }
                 }
                 Section("背景底色") {
                     HStack(spacing: 12) {
