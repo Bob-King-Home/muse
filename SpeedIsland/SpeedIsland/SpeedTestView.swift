@@ -195,12 +195,12 @@ private struct SpeedDialView: View {
         ZStack {
             Circle()
                 .trim(from: 0.0, to: 0.75)
-                .rotationEffect(.degrees(135))
                 .stroke(Color.white.opacity(0.12), lineWidth: 14)
+                .rotationEffect(.degrees(135))
             Circle()
                 .trim(from: 0.0, to: 0.75 * max(progress, 0.001))
-                .rotationEffect(.degrees(135))
                 .stroke(SpeedAppearance.color(hex: "#6FD8F0"), style: StrokeStyle(lineWidth: 14, lineCap: .round))
+                .rotationEffect(.degrees(135))
             VStack(spacing: 2) {
                 Text(phaseText)
                     .font(.caption)
