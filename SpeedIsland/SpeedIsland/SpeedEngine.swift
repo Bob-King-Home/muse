@@ -1,12 +1,9 @@
 import Foundation
 import UIKit
 
-/// v3.0 引擎 — 简化重构
-/// 删掉了 BackgroundKeepAlive（静音音频保活）：GitHub 上同类项目 Cue 已在真机上验证
-/// 静音音频保不住后台（锁屏即被挂起），还会在用户听音乐时抢占打断，所以彻底移除，
-/// 也不再要 UIBackgroundModes: audio。唯一可靠的持续刷新是画中画小窗：小窗开着，
-/// iOS 就不会挂起 App，1 秒定时器一直跑，灵动岛跟着刷。所以 start() 即自动开小窗，
-/// 点一次“开始”就同时开小窗，不用再手动点。
+/// v3.1 引擎 — 画中画已按用户要求移除
+/// 后台刷新改为 iOS 后台抓取（Background Fetch，系统定期唤醒 App 采一次网速推给
+/// 灵动岛，频率由系统决定）；前台打开 App 时仍是 1 秒定时器。
 /// 保留：Live Activity 8 小时到期自动重建；上次开着被杀掉/重启后，再打开 App 自动续开；
 /// 有流量 1 秒，闲时 4 秒心跳，低电量 5 秒；leeway 200ms。
 final class SpeedEngine: ObservableObject {
@@ -14,7 +11,6 @@ final class SpeedEngine: ObservableObject {
     @Published private(set) var upText = "0 B/s"
     @Published private(set) var isWiFi = true
     @Published private(set) var isRunning = false
-    @Published private(set) var isPiPOn = false
     @Published var errorMessage: String?
 
     // intervalText 改成计算属性，不再存一份可能脱节的 @Published
@@ -45,8 +41,6 @@ final class SpeedEngine: ObservableObject {
         sampler.reset()
         lastDownText = ""; lastUpText = ""; lastPush = .distantPast
         startTimerOnly()
-        // v3.0：开始即自动开小窗（小窗是唯一可靠的保活），不用再手动点
-        setPiP(true)
         // 只注册一次，token 保存好，stop() 时按 token 删
         if powerObserver == nil {
             powerObserver = NotificationCenter.default.addObserver(
@@ -81,7 +75,7 @@ final class SpeedEngine: ObservableObject {
         let u = NetworkSpeedSampler.format(s.upSmoothed)
         let now = Date()
         let changed = d != lastDownText || u != lastUpText || s.isWiFi != lastIsWiFi
-        // 心跳：文字不变也每 4 秒推一次，不然灵动岛 5 秒就 stale，PiP 也会断帧
+        // 心跳：文字不变也每 4 秒推一次，不然灵动岛 5 秒就 stale
         let heartbeatDue = now.timeIntervalSince(lastPush) >= 4.0
         guard changed || heartbeatDue else { return }
         lastDownText = d; lastUpText = u; lastIsWiFi = s.isWiFi; lastPush = now
@@ -95,56 +89,17 @@ final class SpeedEngine: ObservableObject {
             // v2.6：8 小时到期自动续期。不要只看 manager.isActive（系统结束 Activity 时
             // 它不会变 false），ensureActive() 每次都查系统里还活着的 Activity，没有就重建。
             self.manager.ensureActive(downText: d, upText: u, down: s.downSmoothed, up: s.upSmoothed, isWiFi: s.isWiFi)
-            if self.isPiPOn {
-                PiPManager.shared.update(downText: d, upText: u, isWiFi: s.isWiFi)
-            }
         }
-    }
-
-    /// v3.0：小窗开关抽成 setPiP，start() 直接调它自动开；togglePiP 在未开始时
-    /// 直接走 start()（start 里已自动开小窗），不再先 start 再取反导致开完又关。
-    private func setPiP(_ on: Bool) {
-        if on == isPiPOn { return }
-        isPiPOn = on
-        if on {
-            // 先赋值回调再启动。原来先调 startPiP() 后赋值，
-            // 不支持 PiP 的设备上同步失败那次回调是 nil，isPiPOn 会一直为 true
-            PiPManager.shared.onPiPFailed = { [weak self] in
-                self?.isPiPOn = false
-                self?.errorMessage = "这台设备不支持画中画小窗，已自动切回灵动岛"
-            }
-            PiPManager.shared.update(downText: downText, upText: upText, isWiFi: isWiFi)
-            PiPManager.shared.startPiP()
-        } else {
-            PiPManager.shared.stopPiP()
-        }
-    }
-
-    func togglePiP() {
-        // 未开始就先开始（start 里已自动开小窗），直接返回，不再取反
-        if !isRunning { start(); return }
-        setPiP(!isPiPOn)
     }
 
     /// v2.5：用户在 App 里改了颜色/字号/底色，立即生效：
-    /// 灵动岛 / 锁屏马上重推，画中画马上重画，不用等下一秒 tick，也不用重装。
+    /// 灵动岛 / 锁屏马上重推，不用等下一秒 tick，也不用重装。
     /// @MainActor：里面调 LiveActivityManager（@MainActor）的方法，不加会报
     /// “call to main actor-isolated instance method in a synchronous nonisolated context”。
     @MainActor
     func refreshAppearance() {
         guard isRunning else { return }
         manager.refreshAppearance(downText: downText, upText: upText, isWiFi: isWiFi)
-        if isPiPOn {
-            PiPManager.shared.update(downText: downText, upText: upText, isWiFi: isWiFi)
-        }
-    }
-
-    /// v2.3：用户在小窗上点了 X，PiPManager 发通知，ContentView 转调这里同步状态。
-    /// 原来 ContentView 收到通知后什么都没做，按钮还显示“关闭小窗”，点一下是空操作，
-    /// 再点一下才能重开。现在收到通知就把 isPiPOn 置 false，下一按直接重开。
-    /// onReceive 在主线程跑，直接改 @Published 没问题。
-    func syncPiPStopped() {
-        if isPiPOn { isPiPOn = false }
     }
 
     private func stopTimerOnly() {
@@ -164,7 +119,6 @@ final class SpeedEngine: ObservableObject {
             powerObserver = nil
         }
         manager.stop()
-        if isPiPOn { PiPManager.shared.stopPiP(); isPiPOn = false }
         downText = "0 B/s"; upText = "0 B/s"
         lastDownText = ""; lastUpText = ""; lastPush = .distantPast
     }
