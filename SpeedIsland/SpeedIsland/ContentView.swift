@@ -3,7 +3,8 @@ import SwiftUI
 // v3.4：深色仪表盘（18 Pro Max 440×956pt 适配）— 深海军底、超大发光数字、
 // 实时速度曲线、青色开始按钮。数字字号按屏幕宽度算（GeometryReader），
 // 不是写死的点数，换机型也不溢出；字号档（小/中/大）再乘一个系数。
-// 曲线用引擎里最近 60 次采样的下载速度画，不新增采样。
+// 布局：内容从灵动岛下方一直铺到 Home 指示条上方，中间用 Spacer 分摊空隙，
+// 不留大段黑边；曲线用引擎里最近 60 次采样的下载速度画，不新增采样。
 struct ContentView: View {
     @StateObject private var engine = SpeedEngine()
     @ObservedObject private var manager = LiveActivityManager.shared
@@ -20,142 +21,153 @@ struct ContentView: View {
         GeometryReader { geo in
             ZStack {
                 SpeedAppearance.color(hex: backgroundHex).ignoresSafeArea()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        Text("NETWORK MONITOR")
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("NETWORK MONITOR")
+                        .font(.caption)
+                        .tracking(6)
+                        .foregroundStyle(SpeedAppearance.color(hex: Self.accentHex))
+
+                    Text(engine.isWiFi ? "Wi-Fi" : "蜂窝")
+                        .font(.caption)
+                        .foregroundStyle(SpeedAppearance.color(hex: Self.accentHex))
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .overlay(
+                            Capsule().stroke(SpeedAppearance.color(hex: Self.accentHex).opacity(0.6), lineWidth: 1)
+                        )
+                        .padding(.top, 12)
+
+                    Spacer()
+
+                    speedBlock(label: "下载", text: engine.downText, size: downloadSize(width: geo.size.width))
+
+                    speedBlock(label: "上传", text: engine.upText, size: uploadSize(width: geo.size.width))
+                        .padding(.top, 18)
+
+                    Spacer()
+
+                    SpeedGraphView(history: engine.downHistory)
+                        .frame(height: graphHeight(height: geo.size.height))
+
+                    Spacer()
+
+                    Button(engine.isRunning ? "停止" : "开始") {
+                        engine.isRunning ? engine.stop() : engine.start()
+                    }
+                    .font(.headline)
+                    .foregroundStyle(SpeedAppearance.color(hex: "#0B1026"))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(SpeedAppearance.color(hex: Self.accentHex))
+                    .clipShape(Capsule())
+                    .buttonStyle(.plain)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(manager.isActive ? "运行中 · \(engine.intervalText)刷新" : "已停止")
+                        Text(keepAlive.statusText)
+                    }
+                    .font(.caption).foregroundStyle(.secondary)
+                    .padding(.top, 14)
+
+                    if let err = engine.errorMessage ?? manager.errorMessage {
+                        Text(err)
                             .font(.caption)
-                            .tracking(6)
-                            .foregroundStyle(SpeedAppearance.color(hex: Self.accentHex))
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
                             .padding(.top, 8)
+                    }
 
-                        Text(engine.isWiFi ? "Wi-Fi" : "蜂窝")
-                            .font(.caption)
-                            .foregroundStyle(SpeedAppearance.color(hex: Self.accentHex))
-                            .padding(.horizontal, 12).padding(.vertical, 6)
-                            .overlay(
-                                Capsule().stroke(SpeedAppearance.color(hex: Self.accentHex).opacity(0.6), lineWidth: 1)
-                            )
-
-                        speedBlock(label: "下载", text: engine.downText, size: downloadSize(width: geo.size.width))
-                        speedBlock(label: "上传", text: engine.upText, size: uploadSize(width: geo.size.width))
-
-                        SpeedGraphView(history: engine.downHistory)
-                            .frame(height: graphHeight(height: geo.size.height))
-
-                        Button(engine.isRunning ? "停止" : "开始") {
-                            engine.isRunning ? engine.stop() : engine.start()
-                        }
-                        .font(.headline)
-                        .foregroundStyle(SpeedAppearance.color(hex: "#0B1026"))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(SpeedAppearance.color(hex: Self.accentHex))
-                        .clipShape(Capsule())
-                        .buttonStyle(.plain)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(manager.isActive ? "运行中 · \(engine.intervalText)刷新" : "已停止")
-                            Text(keepAlive.statusText)
-                        }
-                        .font(.caption).foregroundStyle(.secondary)
-
-                        if let err = engine.errorMessage ?? manager.errorMessage {
-                            Text(err)
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal)
-                        }
-
-                        // MARK: - 外观设置（默认收起，主界面保持干净）
-                        DisclosureGroup("外观设置", isExpanded: $appearanceExpanded) {
-                            VStack(alignment: .leading, spacing: 16) {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("字体颜色").font(.caption).foregroundStyle(.secondary)
-                                    HStack(spacing: 12) {
-                                        ForEach(SpeedAppearance.fontColors) { opt in
-                                            Button {
-                                                fontColorHex = opt.hex
-                                                engine.refreshAppearance()
-                                            } label: {
-                                                Circle()
-                                                    .fill(SpeedAppearance.color(hex: opt.hex))
-                                                    .frame(width: 30, height: 30)
-                                                    .overlay(
-                                                        Circle().stroke(Color.primary.opacity(0.3), lineWidth: 1)
-                                                    )
-                                                    .overlay(
-                                                        Circle().stroke(Color.blue, lineWidth: fontColorHex == opt.hex ? 2 : 0)
-                                                    )
-                                            }
-                                            .buttonStyle(.plain)
-                                            .accessibilityLabel(opt.name)
+                    // MARK: - 外观设置（默认收起，主界面保持干净）
+                    DisclosureGroup("外观设置", isExpanded: $appearanceExpanded) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("字体颜色").font(.caption).foregroundStyle(.secondary)
+                                HStack(spacing: 12) {
+                                    ForEach(SpeedAppearance.fontColors) { opt in
+                                        Button {
+                                            fontColorHex = opt.hex
+                                            engine.refreshAppearance()
+                                        } label: {
+                                            Circle()
+                                                .fill(SpeedAppearance.color(hex: opt.hex))
+                                                .frame(width: 30, height: 30)
+                                                .overlay(
+                                                    Circle().stroke(Color.primary.opacity(0.3), lineWidth: 1)
+                                                )
+                                                .overlay(
+                                                    Circle().stroke(Color.blue, lineWidth: fontColorHex == opt.hex ? 2 : 0)
+                                                )
                                         }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel(opt.name)
                                     }
-                                }
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("字号").font(.caption).foregroundStyle(.secondary)
-                                    Picker("字号", selection: $fontSizeLevel) {
-                                        ForEach(0..<3) { i in
-                                            Text(SpeedAppearance.fontSizeNames[i]).tag(i)
-                                        }
-                                    }
-                                    .pickerStyle(.segmented)
-                                    .onChange(of: fontSizeLevel) { _, _ in engine.refreshAppearance() }
-                                }
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("背景底色").font(.caption).foregroundStyle(.secondary)
-                                    HStack(spacing: 12) {
-                                        ForEach(SpeedAppearance.backgrounds) { opt in
-                                            Button {
-                                                backgroundHex = opt.hex
-                                                engine.refreshAppearance()
-                                            } label: {
-                                                Circle()
-                                                    .fill(SpeedAppearance.color(hex: opt.hex))
-                                                    .frame(width: 30, height: 30)
-                                                    .overlay(
-                                                        Circle().stroke(Color.primary.opacity(0.3), lineWidth: 1)
-                                                    )
-                                                    .overlay(
-                                                        Circle().stroke(Color.blue, lineWidth: backgroundHex == opt.hex ? 2 : 0)
-                                                    )
-                                            }
-                                            .buttonStyle(.plain)
-                                            .accessibilityLabel(opt.name)
-                                        }
-                                    }
-                                    Text("底色会应用到主界面、锁屏和灵动岛。")
-                                        .font(.caption2).foregroundStyle(.secondary)
                                 }
                             }
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("字号").font(.caption).foregroundStyle(.secondary)
+                                Picker("字号", selection: $fontSizeLevel) {
+                                    ForEach(0..<3) { i in
+                                        Text(SpeedAppearance.fontSizeNames[i]).tag(i)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+                                .onChange(of: fontSizeLevel) { _, _ in engine.refreshAppearance() }
+                            }
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("背景底色").font(.caption).foregroundStyle(.secondary)
+                                HStack(spacing: 12) {
+                                    ForEach(SpeedAppearance.backgrounds) { opt in
+                                        Button {
+                                            backgroundHex = opt.hex
+                                            engine.refreshAppearance()
+                                        } label: {
+                                            Circle()
+                                                .fill(SpeedAppearance.color(hex: opt.hex))
+                                                .frame(width: 30, height: 30)
+                                                .overlay(
+                                                    Circle().stroke(Color.primary.opacity(0.3), lineWidth: 1)
+                                                )
+                                                .overlay(
+                                                    Circle().stroke(Color.blue, lineWidth: backgroundHex == opt.hex ? 2 : 0)
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel(opt.name)
+                                    }
+                                }
+                                Text("底色会应用到主界面、锁屏和灵动岛。")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
                         }
-                        .padding(16)
-                        .background(Color.gray.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-
-                        Text("开始后定位保活让 App 在后台持续运行，灵动岛每秒刷新；状态栏会显示定位箭头。点停止后保活结束，箭头消失。")
-                            .font(.caption2).foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity, alignment: .center)
                     }
-                    .padding(24)
+                    .padding(16)
+                    .background(Color.gray.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .padding(.top, 16)
+
+                    Text("开始后定位保活让 App 在后台持续运行，灵动岛每秒刷新；状态栏会显示定位箭头。点停止后保活结束，箭头消失。")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 12)
                 }
+                .padding(.horizontal, 24)
+                .padding(.top, 6)
+                .padding(.bottom, 10)
             }
         }
         .onAppear { engine.restoreIfNeeded() }
     }
 
-    // 18 Pro Max 宽 440pt：下载数字约宽度的 17%，上传约 14%，再乘字号档系数；
+    // 18 Pro Max 宽 440pt：下载数字约宽度的 19%，上传约 16%，再乘字号档系数；
     // minimumScaleFactor 兜底，再长的数字也不会溢出。
     private func downloadSize(width: CGFloat) -> CGFloat {
-        width * 0.17 * [0.85, 1.0, 1.15][SpeedAppearance.clamped(fontSizeLevel)]
+        width * 0.19 * [0.85, 1.0, 1.15][SpeedAppearance.clamped(fontSizeLevel)]
     }
     private func uploadSize(width: CGFloat) -> CGFloat {
-        width * 0.14 * [0.85, 1.0, 1.15][SpeedAppearance.clamped(fontSizeLevel)]
+        width * 0.16 * [0.85, 1.0, 1.15][SpeedAppearance.clamped(fontSizeLevel)]
     }
     private func graphHeight(height: CGFloat) -> CGFloat {
-        min(max(height * 0.13, 96), 140)
+        min(max(height * 0.16, 120), 170)
     }
 
     private func speedBlock(label: String, text: String, size: CGFloat) -> some View {
