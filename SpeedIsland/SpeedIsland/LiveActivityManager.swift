@@ -24,6 +24,9 @@ final class LiveActivityManager: ObservableObject {
     private var lastIp = ""
     private var lastNetType = ""
     private var lastCarrier = ""
+    /// v3.13：本次测速开始时间（苹果倒计时的逻辑 —— 系统本地每秒渲染计时，
+    /// 不用 App 每秒推送）。新开一个 Activity 时记一次，Activity 重建时重记。
+    private var sessionStart = Date()
     private var startTask: Task<Void, Never>?
     private var updateTask: Task<Void, Never>?
     // v2.5：记上次推的外观，改了颜色/字号/底色就算“变了”，也要推一次，
@@ -44,7 +47,8 @@ final class LiveActivityManager: ObservableObject {
             ssid: ssid,
             ip: ip,
             netType: netType,
-            carrier: carrier
+            carrier: carrier,
+            startDate: sessionStart
         )
     }
 
@@ -92,6 +96,8 @@ final class LiveActivityManager: ObservableObject {
             // 串行：先等旧的结束完，再 request，不再异步竞态
             if let old = activity { await old.end(nil, dismissalPolicy: .immediate) }
             let attrs = SpeedActivityAttributes()
+            // v3.13：新开一个 Activity 就是一次新的测速，计时从现在开始
+            sessionStart = Date()
             let state = currentState(downText: downText, upText: upText, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
             do {
                 activity = try Activity.request(attributes: attrs, content: .init(state: state, staleDate: Date().addingTimeInterval(10)))

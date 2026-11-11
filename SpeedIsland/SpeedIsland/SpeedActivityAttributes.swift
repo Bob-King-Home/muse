@@ -20,5 +20,8 @@ struct SpeedActivityAttributes: ActivityAttributes {
         var ip: String = ""
         var netType: String = "Wi-Fi"
         var carrier: String = ""
+        /// v3.13：本次测速开始时间 —— 灵动岛 / 锁屏用 Text(startDate, style: .timer)
+        /// 显示“已运行”计时，系统本地每秒渲染，不用 App 推送（苹果倒计时就是这个逻辑）。
+        var startDate: Date = Date()
     }
 }

@@ -40,6 +40,13 @@ struct SpeedIslandLiveActivity: Widget {
                     Text("IP \(context.state.ip)")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
+                // v3.13：苹果倒计时的逻辑 —— Text(startDate, style: .timer)
+                // 由系统本地每秒渲染，不用 App 推送，所以计时一直在走、一直在刷新
+                HStack(spacing: 4) {
+                    Text("已运行")
+                    Text(context.state.startDate, style: .timer)
+                }
+                .font(.caption2).foregroundStyle(.secondary)
             }
             .padding(12)
             .activityBackgroundTint(color(hex: context.state.backgroundHex).opacity(0.85))
@@ -73,6 +80,12 @@ struct SpeedIslandLiveActivity: Widget {
                             Text("IP \(context.state.ip)")
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
+                        // v3.13：苹果倒计时的逻辑 —— 系统本地每秒渲染，不用 App 推送
+                        HStack(spacing: 4) {
+                            Text("已运行")
+                            Text(context.state.startDate, style: .timer)
+                        }
+                        .font(.caption2).foregroundStyle(fontColor)
                     }
                 }
             } compactLeading: {
