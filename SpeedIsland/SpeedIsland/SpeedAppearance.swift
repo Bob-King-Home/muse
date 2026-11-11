@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// v3.1 白色主题（18 Pro Max 大屏）：默认白底黑字，字号放大；
-/// 字体颜色只给深色（白底上看得清），背景底色只给浅色。
+/// v3.4 深色仪表盘：默认深海军底白字；字体颜色只给浅色、背景底色只给深色，
+/// 深色底上都看得清。
 /// 存法：主 App 的 UserDefaults（普通 key，不用 App Group）。
 /// 灵动岛 / 锁屏拿不到 App 的 UserDefaults，所以这三个值放进
 /// SpeedActivityAttributes.ContentState，每次 start/update 一起推过去，
@@ -10,10 +10,23 @@ enum SpeedAppearance {
     static let fontColorKey = "si_fontColor"
     static let fontSizeKey = "si_fontSize"
     static let backgroundKey = "si_background"
+    static let appearanceVersionKey = "si_appearanceVersion"
+    static let currentAppearanceVersion = 2
 
-    static let defaultFontColor = "#000000"
+    static let defaultFontColor = "#FFFFFF"
     static let defaultFontSize = 1 // 0 小 / 1 中 / 2 大
-    static let defaultBackground = "#FFFFFF"
+    static let defaultBackground = "#0B1026"
+
+    /// v3.4 从白色主题换成深色仪表盘：老版本存的黑字白底在深色底上看不见，
+    /// 第一次打开时一次性重置为新默认值（用户之后再改就按他的来）。
+    static func migrateIfNeeded() {
+        let v = UserDefaults.standard.integer(forKey: appearanceVersionKey)
+        guard v < currentAppearanceVersion else { return }
+        UserDefaults.standard.set(defaultFontColor, forKey: fontColorKey)
+        UserDefaults.standard.set(defaultBackground, forKey: backgroundKey)
+        UserDefaults.standard.set(defaultFontSize, forKey: fontSizeKey)
+        UserDefaults.standard.set(currentAppearanceVersion, forKey: appearanceVersionKey)
+    }
 
     struct Option: Identifiable {
         let id: String
@@ -21,23 +34,23 @@ enum SpeedAppearance {
         let hex: String
     }
 
-    /// 字体颜色：只给深色，配白色底都看得清
+    /// 字体颜色：只给浅色，配深色底都看得清
     static let fontColors: [Option] = [
-        .init(id: "black", name: "黑", hex: "#000000"),
-        .init(id: "darkgray", name: "深灰", hex: "#3A3A3C"),
-        .init(id: "blue", name: "蓝", hex: "#007AFF"),
-        .init(id: "green", name: "绿", hex: "#248A3D"),
-        .init(id: "red", name: "红", hex: "#D70015"),
-        .init(id: "orange", name: "橙", hex: "#C93400"),
+        .init(id: "white", name: "白", hex: "#FFFFFF"),
+        .init(id: "lightgray", name: "浅灰", hex: "#C7C7CC"),
+        .init(id: "cyan", name: "青", hex: "#6FD8F0"),
+        .init(id: "green", name: "绿", hex: "#4ADE80"),
+        .init(id: "yellow", name: "黄", hex: "#FACC15"),
+        .init(id: "orange", name: "橙", hex: "#FB923C"),
     ]
 
-    /// 背景底色：只给浅色，深字在上面都看得清
+    /// 背景底色：只给深色，浅字在上面都看得清
     static let backgrounds: [Option] = [
-        .init(id: "white", name: "白", hex: "#FFFFFF"),
-        .init(id: "lightgray", name: "浅灰", hex: "#F2F2F7"),
-        .init(id: "lightblue", name: "浅蓝", hex: "#E5F1FF"),
-        .init(id: "lightgreen", name: "浅绿", hex: "#E6F4EA"),
-        .init(id: "lightyellow", name: "浅黄", hex: "#FFF8E1"),
+        .init(id: "navy", name: "深海军", hex: "#0B1026"),
+        .init(id: "black", name: "纯黑", hex: "#000000"),
+        .init(id: "darkgray", name: "深灰", hex: "#1C1C1E"),
+        .init(id: "darkblue", name: "藏青", hex: "#152059"),
+        .init(id: "darkgreen", name: "墨绿", hex: "#0F2A1D"),
     ]
 
     static let fontSizeNames = ["小", "中", "大"]

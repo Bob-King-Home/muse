@@ -6,6 +6,11 @@ import UserNotifications
 struct SpeedIslandApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
+    init() {
+        // v3.4：白色主题换深色仪表盘，先迁移存量外观设置，再建界面
+        SpeedAppearance.migrateIfNeeded()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

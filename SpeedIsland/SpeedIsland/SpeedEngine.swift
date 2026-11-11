@@ -11,6 +11,9 @@ final class SpeedEngine: ObservableObject {
     @Published private(set) var upText = "0 B/s"
     @Published private(set) var isWiFi = true
     @Published private(set) var isRunning = false
+    /// v3.4：最近 60 次采样的下载速度，供主界面实时曲线画图（不新增采样）
+    @Published private(set) var downHistory: [Double] = []
+    private var historyBuffer: [Double] = []
     @Published var errorMessage: String?
 
     // intervalText 改成计算属性，不再存一份可能脱节的 @Published
@@ -41,6 +44,7 @@ final class SpeedEngine: ObservableObject {
         UserDefaults.standard.set(true, forKey: Self.wasRunningKey)
         sampler.reset()
         lastDownText = ""; lastUpText = ""; lastPush = .distantPast
+        historyBuffer = []; downHistory = []
         startTimerOnly()
         // v3.3：定位保活和采样一起开（前台点开始，系统允许后台继续定位）
         keepAlive.start()
@@ -74,6 +78,9 @@ final class SpeedEngine: ObservableObject {
 
     private func tick() {
         let s = sampler.sample()
+        // 曲线数据每次采样都记（后台队列的私有缓冲，主线程再发布）
+        historyBuffer.append(s.downSmoothed)
+        if historyBuffer.count > 60 { historyBuffer.removeFirst(historyBuffer.count - 60) }
         let d = NetworkSpeedSampler.format(s.downSmoothed)
         let u = NetworkSpeedSampler.format(s.upSmoothed)
         let now = Date()
@@ -89,6 +96,7 @@ final class SpeedEngine: ObservableObject {
             self.downText = d
             self.upText = u
             self.isWiFi = s.isWiFi
+            self.downHistory = self.historyBuffer
             // v2.6：8 小时到期自动续期。不要只看 manager.isActive（系统结束 Activity 时
             // 它不会变 false），ensureActive() 每次都查系统里还活着的 Activity，没有就重建。
             self.manager.ensureActive(downText: d, upText: u, down: s.downSmoothed, up: s.upSmoothed, isWiFi: s.isWiFi)
@@ -124,6 +132,7 @@ final class SpeedEngine: ObservableObject {
         }
         manager.stop()
         downText = "0 B/s"; upText = "0 B/s"
+        historyBuffer = []; downHistory = []
         lastDownText = ""; lastUpText = ""; lastPush = .distantPast
     }
 
