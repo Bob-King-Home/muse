@@ -91,6 +91,35 @@ enum SpeedAppearance {
         default: return .default
         }
     }
+    /// v3.19：字体族（主界面数字用）：系统 / 苹方 / 黑体 / 宋体（用户 2026-11-12：
+    /// 要能选字体样式，苹果自带字体或黑体这些）。
+    /// “系统”走上面的 Font.Design；选了具体字体族就用 iOS 系统字体族名
+    /// （.custom 族名，找不到时系统自动回退，不会崩）。
+    /// 只影响主界面数字 —— 灵动岛 / 锁屏写死等宽（monospaced），
+    /// 不然不同字体字宽不一样，岛上数字又会乎大乎小来回晃。
+    static let fontFamilyKey = "si_fontFamily"
+    static let defaultFontFamily = "系统"
+    static let fontFamilyNames = ["系统", "苹方", "黑体", "宋体"]
+    static var fontFamily: String {
+        UserDefaults.standard.string(forKey: fontFamilyKey) ?? defaultFontFamily
+    }
+    /// 字体族名（系统 → nil，走 Font.Design；否则返回 iOS 系统字体族名）。
+    static var customFontFamilyName: String? {
+        switch fontFamily {
+        case "苹方": return "PingFang SC"
+        case "黑体": return "Heiti SC"
+        case "宋体": return "Songti SC"
+        default: return nil
+        }
+    }
+    /// 主界面大数字的完整字体：选了字体族就用 .custom（族名 + 字重），
+    /// 否则用系统字体 + Font.Design。调用方再加 .monospacedDigit() 防晃。
+    static func numberFont(size: CGFloat, weight: Font.Weight) -> Font {
+        if let family = customFontFamilyName {
+            return Font.custom(family, size: size).weight(weight)
+        }
+        return Font.system(size: size, weight: weight, design: fontDesign)
+    }
 
     // MARK: - 字号映射
 
