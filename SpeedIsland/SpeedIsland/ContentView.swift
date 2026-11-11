@@ -1,9 +1,12 @@
 import SwiftUI
 
-// v3.5：按市面测速 App（Speedtest / 全球网测）的做法重做 ——
-// 表盘仪表 hero + 大号加粗数字（数字和单位分开渲染，单位小一号）+ 双线曲线 +
-// 网络信息卡（Wi-Fi 名 / 5G / IP）；外观设置放右上角齿轮弹窗，不再藏在底部折叠里。
-// 性能：大数字去掉阴影（每秒重绘的阴影是卡顿主因之一）；数字按屏宽算，18 Pro Max 适配。
+// v3.5：按用户选定的深色仪表盘 mockup（media-generation-speedisland-ui-dark）
+// 结合实际功能改 ——
+// 居中 NETWORK MONITOR 标题 + 网络徽章 + 下载超大数字 + UPLOAD 超大数字 +
+// 网格曲线（下载青色带渐变填充 / 上传绿色）+ 网络信息行 + 青色大开始按钮。
+// mockup 里的 LATENCY/JITTER/PACKET LOSS 没有（苹果不给测 Ping 的接口），
+// 换成我们真实能拿到的：Wi-Fi 名 / 5G / 运营商 / IP。
+// 性能：大数字不加阴影（每秒重绘的阴影是卡顿主因之一）；数字按屏宽算，18 Pro Max 适配。
 // 黑边：Info.plist 加了 UILaunchScreen（深色启动底），根视图背景忽略安全区。
 struct ContentView: View {
     @StateObject private var engine = SpeedEngine()
@@ -24,60 +27,64 @@ struct ContentView: View {
             ZStack {
                 SpeedAppearance.color(hex: backgroundHex).ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 0) {
-                    // 顶栏：标题 + 齿轮（外观设置入口放这里，一眼能看到）
-                    HStack {
-                        Text("网络测速")
-                            .font(.title2).bold()
-                            .foregroundStyle(SpeedAppearance.color(hex: fontColorHex))
-                        Spacer()
-                        Button { showAppearance = true } label: {
-                            Image(systemName: "gearshape")
-                                .font(.title3)
-                                .foregroundStyle(.secondary)
-                                .frame(width: 40, height: 40)
-                                .background(Color.gray.opacity(0.15))
-                                .clipShape(Circle())
+                    // 顶栏：居中标题 + 右上角齿轮（外观设置入口放这里，一眼能看到）
+                    ZStack {
+                        Text("NETWORK MONITOR")
+                            .font(.system(size: 15, weight: .semibold))
+                            .tracking(4)
+                            .foregroundStyle(SpeedAppearance.color(hex: Self.accentHex))
+                            .frame(maxWidth: .infinity)
+                        HStack {
+                            Spacer()
+                            Button { showAppearance = true } label: {
+                                Image(systemName: "gearshape")
+                                    .font(.title3)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 40, height: 40)
+                                    .background(Color.gray.opacity(0.15))
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("外观设置")
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("外观设置")
                     }
                     .padding(.top, 6)
 
-                    // 表盘 hero：当前下载速度
-                    SpeedDialView(downBytesPerSec: engine.downBytesPerSec, downText: engine.downText, fontColorHex: fontColorHex)
-                        .frame(height: dialHeight(height: geo.size.height))
-                        .padding(.top, 8)
+                    // 网络徽章：Wi-Fi / 5G · 运营商（频段苹果不开放，拿不到，不写）
+                    netBadge
+                        .padding(.top, 18)
 
-                    // 上传 + 网络 两张卡
-                    HStack(spacing: 12) {
-                        infoCard(label: "上传") {
-                            SpeedNumberText(text: engine.upText, size: uploadSize(width: geo.size.width), fontColorHex: fontColorHex)
-                        }
-                        infoCard(label: "网络") {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(engine.netType)
-                                    .font(.system(size: 20, weight: .bold))
-                                    .foregroundStyle(SpeedAppearance.color(hex: fontColorHex))
-                                Text(networkDetail)
-                                    .font(.caption).foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                    }
-                    .padding(.top, 14)
+                    // 下载超大数字（mockup 里的主数字）
+                    SpeedNumberText(text: engine.downText, size: downSize(width: geo.size.width), unitScale: 0.55, fontColorHex: fontColorHex)
+                        .padding(.top, 10)
 
-                    // 双线曲线
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 16) {
-                            legendDot(hex: Self.accentHex, text: "下载")
-                            legendDot(hex: Self.upHex, text: "上传")
-                            Spacer()
-                        }
-                        .font(.caption).foregroundStyle(.secondary)
-                        DualSpeedGraphView(down: engine.downHistory, up: engine.upHistory)
-                            .frame(height: graphHeight(height: geo.size.height))
+                    // 上传
+                    Text("UPLOAD")
+                        .font(.system(size: 13, weight: .semibold))
+                        .tracking(2)
+                        .foregroundStyle(SpeedAppearance.color(hex: Self.accentHex))
+                        .padding(.top, 18)
+                    SpeedNumberText(text: engine.upText, size: upSize(width: geo.size.width), unitScale: 0.55, fontColorHex: fontColorHex)
+                        .padding(.top, 2)
+
+                    // 图例 + 网格曲线
+                    HStack(spacing: 16) {
+                        legendDot(hex: Self.accentHex, text: "下载")
+                        legendDot(hex: Self.upHex, text: "上传")
+                        Spacer()
                     }
-                    .padding(.top, 16)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .padding(.top, 20)
+                    DashboardGraphView(down: engine.downHistory, up: engine.upHistory)
+                        .frame(height: graphHeight(height: geo.size.height))
+                        .padding(.top, 6)
+
+                    // 网络信息行：Wi-Fi 名 / 运营商 / IP
+                    Text(networkDetail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .padding(.top, 12)
 
                     Spacer()
 
@@ -87,7 +94,7 @@ struct ContentView: View {
                     .font(.headline)
                     .foregroundStyle(SpeedAppearance.color(hex: "#0B1026"))
                     .frame(maxWidth: .infinity)
-                    .frame(height: 56)
+                    .frame(height: 60)
                     .background(SpeedAppearance.color(hex: Self.accentHex))
                     .clipShape(Capsule())
                     .buttonStyle(.plain)
@@ -129,14 +136,32 @@ struct ContentView: View {
         }
     }
 
+    private var netBadge: some View {
+        HStack(spacing: 6) {
+            Image(systemName: engine.isWiFi ? "wifi" : "antenna.radiowaves.left.and.right")
+                .font(.caption)
+            Text(badgeText)
+                .font(.system(size: 14, weight: .semibold))
+        }
+        .foregroundStyle(SpeedAppearance.color(hex: Self.accentHex))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .overlay(Capsule().stroke(SpeedAppearance.color(hex: Self.accentHex).opacity(0.6), lineWidth: 1))
+    }
+
+    private var badgeText: String {
+        if engine.isWiFi { return "Wi-Fi" }
+        return engine.carrier.isEmpty ? engine.netType : "\(engine.netType) · \(engine.carrier)"
+    }
+
     private var networkDetail: String {
         let ipPart = engine.ip
         if engine.isWiFi {
             let name = engine.ssid.isEmpty ? "Wi-Fi" : engine.ssid
-            return ipPart.isEmpty ? name : "\(name) · \(ipPart)"
+            return ipPart.isEmpty ? name : "\(name) · IP \(ipPart)"
         } else {
             let c = engine.carrier.isEmpty ? engine.netType : engine.carrier
-            return ipPart.isEmpty ? c : "\(c) · \(ipPart)"
+            return ipPart.isEmpty ? c : "\(c) · IP \(ipPart)"
         }
     }
 
@@ -147,27 +172,16 @@ struct ContentView: View {
         }
     }
 
-    private func infoCard<Content: View>(label: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            content()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(Color.gray.opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-    }
-
-    // 18 Pro Max 宽 440pt：表盘数字约宽度的 18%，上传卡数字约 10%，再乘字号档系数；
+    // 18 Pro Max 宽 440pt：下载数字约宽度的 22%，上传约 18%，再乘字号档系数；
     // minimumScaleFactor 兜底，再长的数字也不会溢出。
-    private func dialHeight(height: CGFloat) -> CGFloat {
-        min(max(height * 0.24, 190), 230)
+    private func downSize(width: CGFloat) -> CGFloat {
+        width * 0.22 * [0.85, 1.0, 1.15][SpeedAppearance.clamped(fontSizeLevel)]
     }
-    private func uploadSize(width: CGFloat) -> CGFloat {
-        width * 0.10 * [0.85, 1.0, 1.15][SpeedAppearance.clamped(fontSizeLevel)]
+    private func upSize(width: CGFloat) -> CGFloat {
+        width * 0.18 * [0.85, 1.0, 1.15][SpeedAppearance.clamped(fontSizeLevel)]
     }
     private func graphHeight(height: CGFloat) -> CGFloat {
-        min(max(height * 0.13, 96), 130)
+        min(max(height * 0.16, 110), 150)
     }
 }
 
@@ -176,6 +190,7 @@ struct ContentView: View {
 private struct SpeedNumberText: View {
     var text: String
     var size: CGFloat
+    var unitScale: CGFloat = 0.32
     var fontColorHex: String
 
     var body: some View {
@@ -187,7 +202,7 @@ private struct SpeedNumberText: View {
                 .font(.system(size: size, weight: .black, design: .monospaced))
                 .foregroundStyle(SpeedAppearance.color(hex: fontColorHex))
             Text(unit)
-                .font(.system(size: max(size * 0.32, 11), weight: .semibold, design: .monospaced))
+                .font(.system(size: max(size * unitScale, 11), weight: .semibold, design: .monospaced))
                 .foregroundStyle(SpeedAppearance.color(hex: fontColorHex).opacity(0.75))
         }
         .contentTransition(.identity)
@@ -198,148 +213,89 @@ private struct SpeedNumberText: View {
     }
 }
 
-/// 表盘：半圆仪表，刻度按对数排（0/5/10/20/50/100/200/500/1G/2G/5G，和市面测速 App 一样），
-/// 指针 + 青色进度弧显示当前下载速度，中间是大号加粗数字。
-/// 注意：刻度、弧线、指针各拆成小函数 / 小 View——整块写在一个 body 里编译器
-/// 类型推断会超时（"unable to type-check this expression in reasonable time"）。
-private struct SpeedDialView: View {
-    var downBytesPerSec: Double
-    var downText: String
-    var fontColorHex: String
-
-    private let ticks: [(label: String, mbps: Double)] = [
-        ("0", 0), ("5", 5), ("10", 10), ("20", 20), ("50", 50),
-        ("100", 100), ("200", 200), ("500", 500), ("1G", 1000), ("2G", 2000), ("5G", 5000),
-    ]
-    private let maxMbps = 5000.0
-
-    private func fraction(mbps: Double) -> Double {
-        guard mbps > 0 else { return 0 }
-        return min(log10(mbps + 1) / log10(maxMbps + 1), 1)
-    }
-    private func angle(fraction f: Double) -> Double { 180 - f * 180 }
-    private func point(cx: CGFloat, cy: CGFloat, radius: CGFloat, fraction f: Double) -> CGPoint {
-        // 注意：a 必须是 CGFloat，否则 cos(a) 在 CGFloat/Double 两个重载间有歧义，编不过
-        let a = CGFloat(angle(fraction: f)) * CGFloat.pi / 180
-        return CGPoint(x: cx + radius * cos(a), y: cy - radius * sin(a))
-    }
-
-    var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            let cx = w / 2
-            let cy = h - 8
-            let r = min(w / 2 - 8, h - 16)
-            let f = fraction(mbps: downBytesPerSec * 8 / 1_000_000)
-            ZStack {
-                trackArc(cx: cx, cy: cy, r: r)
-                progressArc(cx: cx, cy: cy, r: r, f: f)
-                ForEach(ticks, id: \.label) { tick in
-                    DialTickMark(label: tick.label, center: CGPoint(x: cx, y: cy), r: r, angle: angle(fraction: fraction(mbps: tick.mbps)))
-                }
-                needle(cx: cx, cy: cy, r: r, f: f)
-                Circle().fill(Color.white).frame(width: 10, height: 10).position(x: cx, y: cy)
-                VStack(spacing: 0) {
-                    SpeedNumberText(text: downText, size: min(w * 0.18, 72), fontColorHex: fontColorHex)
-                    Text("下载").font(.caption).foregroundStyle(.secondary)
-                }
-                .position(x: cx, y: cy - r * 0.45)
-            }
-        }
-    }
-
-    private func trackArc(cx: CGFloat, cy: CGFloat, r: CGFloat) -> some View {
-        Path { path in
-            path.addArc(center: CGPoint(x: cx, y: cy), radius: r, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
-        }
-        .stroke(Color.white.opacity(0.10), lineWidth: 12)
-    }
-
-    private func progressArc(cx: CGFloat, cy: CGFloat, r: CGFloat, f: Double) -> some View {
-        Group {
-            if f > 0.001 {
-                Path { path in
-                    path.addArc(center: CGPoint(x: cx, y: cy), radius: r, startAngle: .degrees(180), endAngle: .degrees(angle(fraction: f)), clockwise: false)
-                }
-                .stroke(SpeedAppearance.color(hex: "#6FD8F0"), style: StrokeStyle(lineWidth: 12, lineCap: .round))
-            }
-        }
-    }
-
-    private func needle(cx: CGFloat, cy: CGFloat, r: CGFloat, f: Double) -> some View {
-        let tip = point(cx: cx, cy: cy, radius: r - 24, fraction: f)
-        return Path { path in
-            path.move(to: CGPoint(x: cx, y: cy))
-            path.addLine(to: tip)
-        }
-        .stroke(Color.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-    }
-}
-
-/// 表盘上一个刻度 + 数字（拆出来，免得编译器对一整个 ForEach 闭包做类型推断超时）。
-private struct DialTickMark: View {
-    var label: String
-    var center: CGPoint
-    var r: CGFloat
-    var angle: Double
-
-    var body: some View {
-        // 注意：a 必须是 CGFloat，否则 cos(a) 在 CGFloat/Double 两个重载间有歧义，编不过
-        let a = CGFloat(angle) * CGFloat.pi / 180
-        let p1 = CGPoint(x: center.x + (r - 16) * cos(a), y: center.y - (r - 16) * sin(a))
-        let p2 = CGPoint(x: center.x + (r - 6) * cos(a), y: center.y - (r - 6) * sin(a))
-        ZStack {
-            Path { path in path.move(to: p1); path.addLine(to: p2) }
-                .stroke(Color.white.opacity(0.35), lineWidth: 1.5)
-            Text(label)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.55))
-                .position(x: center.x + (r - 32) * cos(a), y: center.y - (r - 32) * sin(a))
-        }
-    }
-}
-
-/// 双线实时曲线：下载青色、上传绿色，共用一个最大值归一化。
-private struct DualSpeedGraphView: View {
+/// 网格实时曲线（mockup 风格）：淡网格 + 下载青色线带渐变填充 + 上传绿色线。
+/// 拆成小函数，免得编译器对一整个 body 做类型推断超时。
+private struct DashboardGraphView: View {
     var down: [Double]
     var up: [Double]
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                Path { path in
-                    for f in [0.25, 0.5, 0.75] {
-                        let y = geo.size.height * f
-                        path.move(to: CGPoint(x: 0, y: y))
-                        path.addLine(to: CGPoint(x: geo.size.width, y: y))
-                    }
-                }
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                speedLine(history: down, size: geo.size, hex: "#6FD8F0")
-                speedLine(history: up, size: geo.size, hex: "#4ADE80")
+                gridLines(size: geo.size)
+                downFill(size: geo.size)
+                downLine(size: geo.size)
+                upLine(size: geo.size)
             }
         }
     }
 
-    private func speedLine(history: [Double], size: CGSize, hex: String) -> some View {
-        let maxV = max(down.max() ?? 0, up.max() ?? 0, 1)
+    private func maxValue() -> Double {
+        max(down.max() ?? 0, up.max() ?? 0, 1)
+    }
+
+    private func points(history: [Double], size: CGSize) -> [CGPoint] {
+        let maxV = maxValue()
         let n = history.count
-        let pts: [CGPoint] = history.enumerated().map { i, v in
+        return history.enumerated().map { i, v in
             CGPoint(
                 x: n > 1 ? size.width * CGFloat(i) / CGFloat(n - 1) : 0,
                 y: size.height * (1 - CGFloat(v / maxV))
             )
         }
-        return Group {
-            if pts.count > 1 {
-                Path { path in
-                    path.move(to: pts[0])
-                    for p in pts.dropFirst() { path.addLine(to: p) }
-                }
-                .stroke(SpeedAppearance.color(hex: hex), lineWidth: 2)
+    }
+
+    private func gridLines(size: CGSize) -> some View {
+        Path { path in
+            for i in 1...4 {
+                let y = size.height * CGFloat(i) / 5
+                path.move(to: CGPoint(x: 0, y: y))
+                path.addLine(to: CGPoint(x: size.width, y: y))
+            }
+            for i in 1...5 {
+                let x = size.width * CGFloat(i) / 6
+                path.move(to: CGPoint(x: x, y: 0))
+                path.addLine(to: CGPoint(x: x, y: size.height))
             }
         }
+        .stroke(Color.white.opacity(0.06), lineWidth: 1)
+    }
+
+    private func linePath(history: [Double], size: CGSize) -> Path {
+        let pts = points(history: history, size: size)
+        var path = Path()
+        guard pts.count > 1 else { return path }
+        path.move(to: pts[0])
+        for p in pts.dropFirst() { path.addLine(to: p) }
+        return path
+    }
+
+    private func downFill(size: CGSize) -> some View {
+        let pts = points(history: down, size: size)
+        var path = Path()
+        if pts.count > 1 {
+            path.move(to: pts[0])
+            for p in pts.dropFirst() { path.addLine(to: p) }
+            path.addLine(to: CGPoint(x: size.width, y: size.height))
+            path.addLine(to: CGPoint(x: 0, y: size.height))
+            path.closeSubpath()
+        }
+        return path.fill(
+            LinearGradient(
+                colors: [SpeedAppearance.color(hex: "#6FD8F0").opacity(0.25), .clear],
+                startPoint: .top, endPoint: .bottom
+            )
+        )
+    }
+
+    private func downLine(size: CGSize) -> some View {
+        linePath(history: down, size: size)
+            .stroke(SpeedAppearance.color(hex: "#6FD8F0"), lineWidth: 2)
+    }
+
+    private func upLine(size: CGSize) -> some View {
+        linePath(history: up, size: size)
+            .stroke(SpeedAppearance.color(hex: "#4ADE80"), lineWidth: 2)
     }
 }
 
