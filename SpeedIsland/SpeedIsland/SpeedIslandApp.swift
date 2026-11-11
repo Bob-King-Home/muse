@@ -27,14 +27,9 @@ struct SpeedIslandApp: App {
 
     var body: some Scene {
         WindowGroup {
-            // v3.14：底部两个 Tab（全球网测风格）——监测（实时网速仪表盘）与测速（主动测速）
-            TabView {
-                ContentView()
-                    .tabItem { Label("监测", systemImage: "gauge.with.dots.needle.bottom.50percent") }
-                SpeedTestView()
-                    .tabItem { Label("测速", systemImage: "speedometer") }
-            }
-            .tint(SpeedAppearance.color(hex: "#6FD8F0"))
+            // v3.18：测速功能已删（用户 2026-11-11：太费劲，删了吧）——
+            // 只剩监测（实时网速仪表盘），不再有底部 Tab。
+            ContentView()
         }
     }
 }
