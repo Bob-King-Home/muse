@@ -90,6 +90,10 @@ final class LiveActivityManager: ObservableObject {
             activity = existing
             isActive = true
             update(downText: downText, upText: upText, down: down, up: up, isWiFi: isWiFi, ssid: ssid, ip: ip, netType: netType, carrier: carrier)
+            // v3.15：岛本来就开着（比如上个版本留下的），也要告诉小组件刷新，
+            // 不然小组件一直停在“未开始”。v3.14 只在新建 Activity 时调了一次，
+            // 这个分支直接 return，漏了。
+            WidgetCenter.shared.reloadAllTimelines()
             return
         }
         startTask?.cancel()
@@ -111,6 +115,13 @@ final class LiveActivityManager: ObservableObject {
                 // 要等系统 15 分钟才刷新）。reloadAllTimelines 只是“请系统刷新”，
                 // 系统仍会限流，但开/关岛这种低频操作不会把预算耗光。
                 WidgetCenter.shared.reloadAllTimelines()
+                // v3.15：再补一次（3 秒后）。Activity.request 刚回来时，
+                // 小组件进程可能还没看到新 Activity，立刻 reload 会读到空，
+                // 于是继续显示“未开始”。3 秒后 Activity 肯定已注册，再请系统刷一次。
+                Task {
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    WidgetCenter.shared.reloadAllTimelines()
+                }
             } catch {
                 errorMessage = "灵动岛启动失败：\(error.localizedDescription)"
             }
@@ -187,6 +198,9 @@ final class LiveActivityManager: ObservableObject {
                 rememberNetInfo(ssid: ssid, ip: ip, netType: netType, carrier: carrier)
                 isActive = true
                 errorMessage = nil
+                // v3.15：5 分钟重建也换了新 Activity，小组件也要跟上（之前漏了，
+                // 重建后小组件一直拿旧时间线，速度停在重建前那一刻）。
+                WidgetCenter.shared.reloadAllTimelines()
             } catch {
                 errorMessage = "灵动岛重建失败：\(error.localizedDescription)"
             }
