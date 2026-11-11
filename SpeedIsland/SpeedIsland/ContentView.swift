@@ -1,12 +1,8 @@
 import SwiftUI
 
-// v2.2：2 个按钮，没有广告
-// v2.5 加了外观设置区（字体颜色 / 字号 / 背景底色），在主界面里直接改，不是独立设置页
-// 修 P1-7：失败会显示一句话，不再只显示“已停止”让人猜
-// 修 P3-6：@StateObject 不接共享单例，改 @ObservedObject
-// 永远开：打开 App 时如果上次是开着的，自动续开
-// v2.5 外观自定义：字体颜色 / 字号 / 背景底色，App 里直接改，改完立即生效，
-// 灵动岛 / 锁屏 / 小窗一起变，不用重装。设置存在 UserDefaults，推给灵动岛时走 ContentState。
+// v3.0：简化版 — 点“开始”即自动打开悬浮小窗，小窗开着就一直 1 秒刷新；
+// 静音音频保活已删（真机上保不住，还会打断音乐），不再有后台音频模式。
+// 外观设置（字体颜色 / 字号 / 背景底色）保留，在主界面里直接改。
 struct ContentView: View {
     @StateObject private var engine = SpeedEngine()
     @ObservedObject private var manager = LiveActivityManager.shared
@@ -136,7 +132,7 @@ struct ContentView: View {
                     .background(Color.gray.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 14))
 
-                    Text("不关就一直都在：8 小时到期自动续，重启手机后打开 App 自动续开")
+                    Text("点开始就自动打开悬浮小窗，小窗开着就一直 1 秒刷新；关掉小窗后回到 App 点“悬浮小窗”可重开。灵动岛 8 小时到期自动续，重启手机后打开 App 自动续开。")
                         .font(.caption2).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
