@@ -1,20 +1,23 @@
 import Foundation
-import CryptoKit
 
-/// v3.15：测速节点。两种协议：
-/// - Cloudflare：原有协议（__down/__up，TCP Ping 到 223.5.5.5:443）。
-/// - LibreSpeed：中科大 test.ustc.edu.cn（empty.php / garbage.php）。
-///   测前要过一道 Proof of Work（见 USTCPow），不然 empty/garbage 直接回 500。
-///   做法照抄开源 CLI speedtest-cli-ustc（Exynos-8890/speedtest-cli-ustc）：
-///   先 GET 首页建会话 → GET backend/pow.php 拿 challenge → 算 nonce →
-///   POST backend/pow_verify.php → 再 GET backend/getIP.php 拿公网 IP。
-/// 节点存在 UserDefaults（si_speedtest_node），默认中科大（国内线路优先，
-/// Cloudflare 在部分公司网/校园网下不通，截图里下载就是这么失败的）。
-/// speedtest.im / 全球网测用的是自家/ Ookla 的闭源节点，没有公开接口可直接调，
-/// 所以节点选择照它们的思路做（可换节点、默认记住），节点本身用公开的 USTC + Cloudflare。
+/// v3.16：测速节点（全球网测风格 —— 多节点 + 推荐最快节点）。
+/// 中科大已去掉（用户 2026-11-11：没必要中科大；它在公司网下预检就连不上）。
+/// 两个节点都是 HTTPS 直连，不用 POW、不用 SDK、不用登录：
+/// - Cloudflare：speed.cloudflare.com（__down/__up，全球 CDN）。
+///   Ping = TCP 连接 223.5.5.5:443（阿里 DNS，5 次取最小/平均）。
+/// - Cachefly：cachefly.cachefly.net（10mb.test / 100mb.test，全球 CDN）。
+///   Ping = TCP 连接到 cachefly.cachefly.net:443。
+///   上传没有公开端点，所以两个节点的上传都走 Cloudflare 的 __up
+///   （上传只是往服务器发数据、测发送速率，用谁的端点不影响结果）。
+/// 节点存在 UserDefaults（si_speedtest_node），默认 Cloudflare。
+/// “推荐最快节点”：进测速页时对两个节点各测一次延迟（TCP 连接），
+/// 延迟最低的那个标“推荐”；用户也可以手动换节点，换了就记住。
+/// speedtest.im / 全球网测用的是 Ookla 的闭源服务器群，没有公开接口可直接调，
+/// 所以这里用公开的 Cloudflare + Cachefly 两个 CDN 节点，思路和它们一样
+/// （多节点可选、按延迟推荐最快）。
 enum SpeedTestNodeKind: String {
     case cloudflare
-    case librespeed
+    case cachefly
 }
 
 struct SpeedTestNode: Identifiable, Equatable, Hashable {
@@ -22,62 +25,32 @@ struct SpeedTestNode: Identifiable, Equatable, Hashable {
     let name: String
     let location: String
     let kind: SpeedTestNodeKind
-    let baseURL: String
+    /// 测延迟用的主机（TCP 连接到它的 443 端口）。
+    let pingHost: String
+    /// 下载地址（单文件，够大，10 秒取样不会下完）。
+    let downloadURL: String
 
-    static let ustc = SpeedTestNode(
-        id: "ustc",
-        name: "中科大",
-        location: "合肥 · 教育网",
-        kind: .librespeed,
-        baseURL: "https://test.ustc.edu.cn"
-    )
     static let cloudflare = SpeedTestNode(
         id: "cloudflare",
         name: "Cloudflare",
         location: "全球 · 自动",
         kind: .cloudflare,
-        baseURL: "https://speed.cloudflare.com"
+        pingHost: "223.5.5.5",
+        downloadURL: "https://speed.cloudflare.com/__down?bytes=200000000"
+    )
+    static let cachefly = SpeedTestNode(
+        id: "cachefly",
+        name: "Cachefly",
+        location: "全球 · CDN",
+        kind: .cachefly,
+        pingHost: "cachefly.cachefly.net",
+        downloadURL: "https://cachefly.cachefly.net/100mb.test"
     )
 
-    static let all: [SpeedTestNode] = [.ustc, .cloudflare]
-    static let `default` = ustc
+    static let all: [SpeedTestNode] = [.cloudflare, .cachefly]
+    static let `default` = cloudflare
 
     static func by(id: String) -> SpeedTestNode {
         all.first { $0.id == id } ?? .default
-    }
-}
-
-/// USTC 测速站的 Proof of Work（照抄 CLI 的算法，见上面注释）。
-/// GET backend/pow.php 返回 {"challenge": "...", "difficulty": N, "token": "..."}。
-/// 找一个 nonce（十进制字符串），使 SHA256(challenge + nonce) 的 hex 以
-/// ceil(difficulty/4) 个 0 开头；再 POST {"token": token, "nonce": nonce}
-/// 到 backend/pow_verify.php，服务器认下这个会话（靠 Cookie）。
-/// 注意：这里按 hex 前缀比，不是按 bit 数比 —— difficulty=18 也要 5 个 hex 0
-/// （20 bit），和 CLI 的 hexdigest().startswith("0" * ceil(difficulty/4)) 完全一致。
-/// 纯 CPU 循环，调用方务必放后台线程（Task.detached），别堵主线程。
-enum USTCPow {
-    static func solve(challenge: String, difficulty: Int, maxNonce: Int = 100_000_000) -> String? {
-        let zeroHexChars = (difficulty + 3) / 4
-        let zeroBits = zeroHexChars * 4
-        let fullBytes = zeroBits / 8
-        let remBits = zeroBits % 8
-        var nonce = 0
-        while nonce < maxNonce {
-            let payload = Data((challenge + String(nonce)).utf8)
-            // SHA256Digest 不支持下标，先转 Data 再按字节比
-            let digest = Data(SHA256.hash(data: payload))
-            var ok = true
-            for i in 0..<fullBytes where digest[i] != 0 {
-                ok = false
-                break
-            }
-            if ok, remBits > 0 {
-                let mask = UInt8(0xFF) << (8 - remBits)
-                if digest[fullBytes] & mask != 0 { ok = false }
-            }
-            if ok { return String(nonce) }
-            nonce += 1
-        }
-        return nil
     }
 }
