@@ -19,6 +19,7 @@ jobs:
           xcodebuild -project SpeedIsland.xcodeproj \
             -target SpeedIsland \
             -configuration Release \
+            -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             CONFIGURATION_BUILD_DIR="$PWD/build/Release-iphoneos" \
             CODE_SIGNING_ALLOWED=NO
