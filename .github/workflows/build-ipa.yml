@@ -20,18 +20,18 @@ jobs:
             -target SpeedIsland \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath build \
+            CONFIGURATION_BUILD_DIR="$PWD/build/Release-iphoneos" \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Verify widget is embedded
         working-directory: SpeedIsland
         run: |
-          ls -la build/Build/Products/Release-iphoneos/SpeedIsland.app/PlugIns/
+          ls -la build/Release-iphoneos/SpeedIsland.app/PlugIns/
 
       - name: Package IPA
         working-directory: SpeedIsland
         run: |
-          APP_PATH="build/Build/Products/Release-iphoneos/SpeedIsland.app"
+          APP_PATH="build/Release-iphoneos/SpeedIsland.app"
           mkdir -p Payload
           cp -r "$APP_PATH" Payload/
           zip -r SpeedIsland-unsigned.ipa Payload
