@@ -1,8 +1,8 @@
 import SwiftUI
 
-// v3.0：简化版 — 点“开始”即自动打开悬浮小窗，小窗开着就一直 1 秒刷新；
-// 静音音频保活已删（真机上保不住，还会打断音乐），不再有后台音频模式。
-// 外观设置（字体颜色 / 字号 / 背景底色）保留，在主界面里直接改。
+// v3.1：白色简洁版（18 Pro Max）— 白底黑字、数字放大；
+// 画中画已移除，没有悬浮小窗按钮；外观设置收进可折叠区，默认收起，主界面只剩
+// 速度、开始/停止、状态三行。
 struct ContentView: View {
     @StateObject private var engine = SpeedEngine()
     @ObservedObject private var manager = LiveActivityManager.shared
@@ -10,6 +10,7 @@ struct ContentView: View {
     @AppStorage(SpeedAppearance.fontColorKey) private var fontColorHex = SpeedAppearance.defaultFontColor
     @AppStorage(SpeedAppearance.fontSizeKey) private var fontSizeLevel = SpeedAppearance.defaultFontSize
     @AppStorage(SpeedAppearance.backgroundKey) private var backgroundHex = SpeedAppearance.defaultBackground
+    @State private var appearanceExpanded = false
 
     var body: some View {
         ZStack {
@@ -45,12 +46,6 @@ struct ContentView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
 
-                    // 不再置灰：没开始就先开始再开小窗，一键就能用
-                    Button(engine.isPiPOn ? "关闭小窗" : "悬浮小窗") {
-                        engine.togglePiP()
-                    }
-                    .buttonStyle(.bordered)
-
                     Text(manager.isActive ? "运行中 · \(engine.intervalText)刷新" : "已停止")
                         .font(.caption).foregroundStyle(.secondary)
 
@@ -62,9 +57,9 @@ struct ContentView: View {
                             .padding(.horizontal)
                     }
 
-                    // MARK: - v2.5 外观设置
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("外观").font(.headline)
+                    // MARK: - v3.1 外观设置（默认收起，主界面保持干净）
+                    DisclosureGroup("外观设置", isExpanded: $appearanceExpanded) {
+                        VStack(alignment: .leading, spacing: 16) {
                         // 字体颜色
                         VStack(alignment: .leading, spacing: 8) {
                             Text("字体颜色").font(.caption).foregroundStyle(.secondary)
@@ -124,15 +119,16 @@ struct ContentView: View {
                                     .accessibilityLabel(opt.name)
                                 }
                             }
-                            Text("底色应用到主界面、小窗和锁屏；灵动岛本身的底是系统黑，改不了。")
+                            Text("底色应用到主界面和锁屏；灵动岛本身的底是系统黑，改不了。")
                                 .font(.caption2).foregroundStyle(.secondary)
+                        }
                         }
                     }
                     .padding(16)
                     .background(Color.gray.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 14))
 
-                    Text("点开始就自动打开悬浮小窗，小窗开着就一直 1 秒刷新；关掉小窗后回到 App 点“悬浮小窗”可重开。灵动岛 8 小时到期自动续，重启手机后打开 App 自动续开。")
+                    Text("回到主页面后由系统后台刷新定期更新灵动岛；打开 App 时每秒刷新。想一直看最新速度就打开 App。")
                         .font(.caption2).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
@@ -140,9 +136,5 @@ struct ContentView: View {
             }
         }
         .onAppear { engine.restoreIfNeeded() }
-        .onReceive(NotificationCenter.default.publisher(for: .init("SpeedIslandPiPDidStop"))) { _ in
-            // v2.3：小窗被用户点 X 关掉，马上同步按钮状态，不等下一次 tick
-            engine.syncPiPStopped()
-        }
     }
 }
