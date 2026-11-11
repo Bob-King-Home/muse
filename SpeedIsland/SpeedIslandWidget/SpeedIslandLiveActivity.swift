@@ -33,7 +33,7 @@ struct SpeedIslandLiveActivity: Widget {
         } dynamicIsland: { context in
             let fontColor = color(hex: context.state.fontColorHex)
             let islandSize = islandFontSize(level: context.state.fontSizeLevel)
-            DynamicIsland {
+            return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     Text("↓ \(context.state.downText)")
                         .font(.system(size: islandSize + 2, design: .monospaced))
