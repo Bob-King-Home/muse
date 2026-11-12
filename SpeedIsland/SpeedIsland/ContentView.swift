@@ -77,7 +77,7 @@ struct ContentView: View {
                         legendDot(hex: Self.upHex, text: "上传")
                         Spacer()
                     }
-                    .font(.caption).foregroundStyle(.white)
+                    .font(.caption).foregroundStyle(.white.opacity(0.75))
                     .padding(.top, 20)
                     // v3.19：曲线左侧加网速刻度（最大值 / 一半 / 0），不然光看线不知道多快。
                     // 刻度用最大值算（下载/上传历史里的最大值），和曲线共用同一个 max。
@@ -101,7 +101,7 @@ struct ContentView: View {
                     // 网络信息行：Wi-Fi 名 / 运营商 / IP
                     Text(networkDetail)
                         .font(.caption)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.white.opacity(0.75))
                         .lineLimit(1)
                         .padding(.top, 12)
 
@@ -125,7 +125,7 @@ struct ContentView: View {
                         .buttonStyle(.plain)
                     }
                     .font(.caption)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.white.opacity(0.75))
                     .padding(.top, 8)
 
                     Spacer()
@@ -146,7 +146,7 @@ struct ContentView: View {
                     // v3.19：状态收成一行（原来两行 + 脚注三行太占地方）。
                     // 定位保活出问题（未授权/出错）时显示它的问题，不然只说“定位保活中”。
                     Text(statusLine)
-                        .font(.caption).foregroundStyle(.white)
+                        .font(.caption).foregroundStyle(.white.opacity(0.75))
                         .padding(.top, 14)
 
                     // v3.12：灵动岛开关 —— 关掉后 App 继续跑、主界面照常显示，只是不推灵动岛
@@ -159,7 +159,7 @@ struct ContentView: View {
                         ))
                         .labelsHidden()
                     }
-                    .font(.caption).foregroundStyle(.white)
+                    .font(.caption).foregroundStyle(.white.opacity(0.75))
                     .padding(.top, 10)
 
                     if let err = engine.errorMessage ?? manager.errorMessage {
@@ -172,7 +172,7 @@ struct ContentView: View {
 
                     // v3.19：脚注再缩成一句（用户说底部太啰嗦）。
                     Text("定位保活让 App 在后台运行，状态栏会显示定位箭头；关灵动岛会同时停掉保活。")
-                        .font(.caption2).foregroundStyle(.white.opacity(0.85))
+                        .font(.caption2).foregroundStyle(.white.opacity(0.75))
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.top, 12)
